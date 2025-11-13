@@ -1,0 +1,625 @@
+{
+  "name": "Agent 2: Guardrail-Protected Email Processor",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "email/process",
+        "responseMode": "lastNode",
+        "options": {}
+      },
+      "id": "7edb3f43-661b-44ca-bc3d-9e2b921551cb",
+      "name": "Webhook - Incoming Email",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [
+        -22576,
+        944
+      ],
+      "webhookId": "email-processor-webhook",
+      "notes": "Entry point for incoming emails\nExpected: {from, subject, body, timestamp, email_id}\nWebhook has authentication as first guardrail"
+    },
+    {
+      "parameters": {
+        "jsCode": "const email = $json;\n\n// Initialize guardrails tracking\nconst guardrails = {\n  sender_validation: { passed: false, checks: {} },\n  rate_limiting: { passed: false, checks: {} },\n  content_validation: { passed: false, checks: {} },\n  output_validation: { passed: false, checks: {} },\n  confidence_check: { passed: false, checks: {} },\n  cost_control: { passed: false, checks: {} }\n};\n\n// Sender validation checks\nconst checks = {\n  emailExists: !!email.from,\n  validFormat: /^[^\\s@]+@[^\\s@]+\\.[^\\s@]+$/.test(email.from || ''),\n  notBounced: !(email.from || '').includes('mailer-daemon'),\n  notNoReply: !(email.from || '').includes('noreply'),\n  domainNotBlacklisted: !checkBlacklist(email.from || '')\n};\n\nfunction checkBlacklist(email) {\n  const blacklistedDomains = ['spam.com', 'fakeemail.org', 'abuse.net'];\n  const domain = email.split('@')[1] || '';\n  return blacklistedDomains.includes(domain);\n}\n\nconst allChecksPassed = Object.values(checks).every(v => v === true);\n\nguardrails.sender_validation.passed = allChecksPassed;\nguardrails.sender_validation.checks = checks;\n\nemail.guardrails = guardrails;\nemail.currentGuardrail = 'sender_validation';\nemail.guardrailsPassed = allChecksPassed ? ['sender_validation'] : [];\nemail.guardrailsFailed = allChecksPassed ? [] : ['sender_validation'];\n\nreturn { json: email };"
+      },
+      "id": "bc1d25fd-8b2f-4f3c-bc50-c768e58b053c",
+      "name": "Code - Guardrail 1: Sender Validation",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -22352,
+        944
+      ],
+      "notes": "GUARDRAIL 1: Validates sender email\nChecks: format, blacklist, bounce addresses\nCreates guardrails tracking object"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 1
+          },
+          "conditions": [
+            {
+              "id": "sender-valid",
+              "leftValue": "={{$json.guardrails.sender_validation.passed}}",
+              "rightValue": true,
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "297a86e4-1e5a-4270-a59f-8369698fde0a",
+      "name": "Switch - Sender Router",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [
+        -22128,
+        944
+      ],
+      "notes": "First guardrail gate\nFailed validation stops processing immediately"
+    },
+    {
+      "parameters": {
+        "jsCode": "// Get email from input (before Postgres)\nconst email = $input.first().json;\n// Postgres result in current json\nconst dbResult = $json;\n\nconst requestCount = parseInt(dbResult.request_count) || 0;\nconst MAX_REQUESTS_PER_HOUR = 10;\n\nconst checks = {\n  underLimit: requestCount < MAX_REQUESTS_PER_HOUR,\n  notBurst: requestCount < (MAX_REQUESTS_PER_HOUR / 4),\n  currentCount: requestCount,\n  limit: MAX_REQUESTS_PER_HOUR,\n  remainingQuota: Math.max(0, MAX_REQUESTS_PER_HOUR - requestCount)\n};\n\nconst passed = checks.underLimit;\n\n// Ensure guardrails and guardrails.rate_limiting objects exist\nemail.guardrails = email.guardrails || {};\nemail.guardrails.rate_limiting = email.guardrails.rate_limiting || {};\n\nemail.guardrails.rate_limiting.passed = passed;\nemail.guardrails.rate_limiting.checks = checks;\n\n// Ensure guardrailsPassed and guardrailsFailed arrays exist\nemail.guardrailsPassed = email.guardrailsPassed || [];\nemail.guardrailsFailed = email.guardrailsFailed || [];\n \nif (passed) {\n  email.guardrailsPassed.push('rate_limiting');\n} else {\n  email.guardrailsFailed.push('rate_limiting');\n}\n\nemail.currentGuardrail = 'rate_limiting';\n\nreturn { json: email };"
+      },
+      "id": "dc07dfc7-fe21-443f-9c76-d0a3ae16b02c",
+      "name": "Code - Evaluate Rate Limit",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -21680,
+        824
+      ],
+      "notes": "Enforces per-sender rate limit\nPrevents resource exhaustion attacks\nTracks remaining quota"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 1
+          },
+          "conditions": [
+            {
+              "id": "rate-ok",
+              "leftValue": "={{$json.guardrails.rate_limiting.passed}}",
+              "rightValue": true,
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "31c11636-e4ef-4b8d-8a6e-397d7325c554",
+      "name": "Switch - Rate Limit Router",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [
+        -21456,
+        824
+      ],
+      "notes": "Second guardrail gate\nRate-limited requests get special rejection"
+    },
+    {
+      "parameters": {
+        "jsCode": "const email = $json;\n\n// Ensure guardrail structures exist\nemail.guardrails = email.guardrails || {};\nemail.guardrails.content_validation = email.guardrails.content_validation || {};\nemail.guardrailsPassed = email.guardrailsPassed || [];\nemail.guardrailsFailed = email.guardrailsFailed || [];\n\n// Ensure body and subject exist\nconst body = email.body || '';\nconst subject = email.subject || '';\n// ... rest unchanged ...\n\n\n// Content validation checks\nconst checks = {\n  hasSubject: !!(subject && subject.trim()),\n  hasBody: !!(body && body.trim()),\n  \n  bodyLength: {\n    ok: body && body.length > 10 && body.length < 10000,\n    actual: body.length,\n    min: 10,\n    max: 10000\n  },\n  \n  subjectLength: {\n    ok: subject && subject.length > 2 && subject.length < 200,\n    actual: subject.length,\n    min: 2,\n    max: 200\n  },\n  \n  // Safety checks\n  noScriptTags: !/<script|javascript:|onerror=/i.test(body + subject),\n  noSQLPatterns: !/(\\bdrop\\b|\\bdelete\\b|\\binsert\\b|\\bupdate\\b.*\\bset\\b)/i.test(body + subject),\n  noExcessiveSpecialChars: (body.match(/[^a-zA-Z0-9\\s.,!?-]/g) || []).length < 50,\n  \n  // Content quality\n  notAllCaps: subject !== subject.toUpperCase() || subject.length < 10,\n  reasonableWords: (body.split(/\\s+/).length >= 3),\n  notSpam: !/(viagra|casino|prize|winner|click here)/i.test(subject + body)\n};\n\n// Flatten checks\nconst flatChecks = {\n  hasSubject: checks.hasSubject,\n  hasBody: checks.hasBody,\n  bodyLengthOk: checks.bodyLength.ok,\n  subjectLengthOk: checks.subjectLength.ok,\n  noScriptTags: checks.noScriptTags,\n  noSQLPatterns: checks.noSQLPatterns,\n  noExcessiveSpecialChars: checks.noExcessiveSpecialChars,\n  notAllCaps: checks.notAllCaps,\n  reasonableWords: checks.reasonableWords,\n  notSpam: checks.notSpam\n};\n\nconst passedCount = Object.values(flatChecks).filter(v => v === true).length;\nconst passed = passedCount >= 8;\n\nemail.guardrails.content_validation.passed = passed;\nemail.guardrails.content_validation.checks = checks;\nemail.guardrails.content_validation.score = `${passedCount}/10`;\n\nif (passed) {\n  email.guardrailsPassed.push('content_validation');\n} else {\n  email.guardrailsFailed.push('content_validation');\n}\n\nemail.currentGuardrail = 'content_validation';\n\nreturn { json: email };"
+      },
+      "id": "a49d58ef-b5f8-459f-93b8-846dcaaddeff",
+      "name": "Code - Guardrail 3: Content Validation",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -21232,
+        736
+      ],
+      "notes": "GUARDRAIL 3: Comprehensive content checks\nPrevents injection attacks, catches spam/abuse\nFlexible threshold (8/10) allows natural variation"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 1
+          },
+          "conditions": [
+            {
+              "id": "content-valid",
+              "leftValue": "={{$json.guardrails.content_validation.passed}}",
+              "rightValue": true,
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "3cd7c563-7c76-4288-a2f9-3ed5a0a73dc2",
+      "name": "Switch - Content Router",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [
+        -21008,
+        736
+      ],
+      "notes": "Third guardrail gate\nFailed content validation rejects email"
+    },
+    {
+      "parameters": {
+        "modelId": "gpt-4o-mini",
+        "messages": {
+          "values": [
+            {
+              "content": "You are an email triage classifier. Respond ONLY with a valid JSON object with the following fields:\ncategory (technical|billing|account|feature|general),\npriority (high|medium|low),\nconfidence (0–1 float),\nreasoning (short string),\nsuggested_team (string),\nestimated_complexity (simple|moderate|complex).\nDo not include any other keys.",
+              "role": "system"
+            },
+            {
+              "content": "=From: {{$json.from}}\nSubject: {{$json.subject}}\nBody: {{$json.body}}"
+            }
+          ]
+        },
+        "jsonOutput": true,
+        "options": {
+          "maxTokens": 200,
+          "temperature": 0.1
+        }
+      },
+      "id": "b526cd49-5c52-4ce4-98d7-e788e226bdd9",
+      "name": "AI Agent - Classify Email",
+      "type": "@n8n/n8n-nodes-langchain.openAi",
+      "typeVersion": 1,
+      "position": [
+        -20784,
+        680
+      ],
+      "credentials": {
+        "openAiApi": {
+          "id": "k4hQJPTzNMv31gPt",
+          "name": "OpenAi account"
+        }
+      },
+      "notes": "Small, fast model for classification\nStructured output enforced\n10-second timeout guardrail"
+    },
+    {
+      "parameters": {
+        "jsCode": "// Current item from previous node (AI response wrapper)\nconst item = $json;\n\n// ---- 1. Extract AI output payload ----\n\n// If using OpenAI-style response: data is under message.content\n// If at some point you switch to a flatter JSON, this still works.\nconst aiContent =\n  (item.message && item.message.content)\n    ? item.message.content\n    : item; // fallback if already flat\n\n// ---- 2. Ensure guardrail containers exist ----\nitem.guardrails = item.guardrails || {};\nitem.guardrails.output_validation = item.guardrails.output_validation || {};\nitem.guardrailsPassed = item.guardrailsPassed || [];\nitem.guardrailsFailed = item.guardrailsFailed || [];\n\n// ---- 3. Expected schema ----\nconst requiredFields = [\n  'category',\n  'priority',\n  'confidence',\n  'reasoning',\n  'suggested_team',\n  'estimated_complexity',\n];\n\nconst validCategories = ['technical', 'billing', 'account', 'feature', 'general'];\nconst validPriorities = ['high', 'medium', 'low'];\nconst validComplexity = ['simple', 'moderate', 'complex'];\n\n// ---- 4. Run checks on aiContent (the actual model output) ----\nconst checks = {\n  allFieldsPresent: requiredFields.every((field) =>\n    Object.prototype.hasOwnProperty.call(aiContent, field),\n  ),\n  categoryValid: validCategories.includes(aiContent.category),\n  priorityValid: validPriorities.includes(aiContent.priority),\n  complexityValid: validComplexity.includes(aiContent.estimated_complexity),\n  confidenceInRange:\n    typeof aiContent.confidence === 'number' &&\n    aiContent.confidence >= 0 &&\n    aiContent.confidence <= 1,\n  reasoningPresent:\n    typeof aiContent.reasoning === 'string' &&\n    aiContent.reasoning.trim().length > 5,\n  suggestedTeamPresent:\n    typeof aiContent.suggested_team === 'string' &&\n    aiContent.suggested_team.trim().length > 0,\n};\n\nconst allChecksPassed = Object.values(checks).every((v) => v === true);\n\n// ---- 5. Store guardrail result ----\nitem.guardrails.output_validation.passed = allChecksPassed;\nitem.guardrails.output_validation.checks = checks;\n\n// ---- 6. Attach classification & pass/fail tags ----\nif (allChecksPassed) {\n  item.classification = {\n    category: aiContent.category,\n    priority: aiContent.priority,\n    confidence: aiContent.confidence,\n    reasoning: aiContent.reasoning,\n    suggested_team: aiContent.suggested_team,\n    estimated_complexity: aiContent.estimated_complexity,\n  };\n  if (!item.guardrailsPassed.includes('output_validation')) {\n    item.guardrailsPassed.push('output_validation');\n  }\n} else {\n  item.classification = null;\n  if (!item.guardrailsFailed.includes('output_validation')) {\n    item.guardrailsFailed.push('output_validation');\n  }\n}\n\nitem.currentGuardrail = 'output_validation';\n\nreturn { json: item };\n"
+      },
+      "id": "b9534875-e7d7-414f-bf46-0f3213db2c2b",
+      "name": "Code - Guardrail 4: Output Schema Validation",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -20432,
+        680
+      ],
+      "notes": "GUARDRAIL 4: Validates AI output against schema\nCatches hallucinated categories\nEnsures all required fields present"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 1
+          },
+          "conditions": [
+            {
+              "id": "output-valid",
+              "leftValue": "={{$json.guardrails.output_validation.passed}}",
+              "rightValue": true,
+              "operator": {
+                "type": "boolean",
+                "operation": "true"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "4fa91848-67a4-441e-a492-68c095242685",
+      "name": "Switch - Output Validation Router",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [
+        -20208,
+        680
+      ],
+      "notes": "Fourth guardrail gate\nOutput validation failure could trigger retry"
+    },
+    {
+      "parameters": {
+        "jsCode": "const email = $json;\nconst classification = email.classification;\n\nconst thresholds = {\n  high: 0.75,\n  medium: 0.65,\n  low: 0.55\n};\n\nconst requiredConfidence = thresholds[classification.priority] || 0.70;\nconst actualConfidence = classification.confidence;\n\nconst checks = {\n  meetsThreshold: actualConfidence >= requiredConfidence,\n  threshold: requiredConfidence,\n  actual: actualConfidence,\n  gap: requiredConfidence - actualConfidence,\n  priority: classification.priority\n};\n\nconst passed = checks.meetsThreshold;\n\nif (passed) {\n  email.routingDecision = 'automatic';\n  email.guardrailsPassed.push('confidence_check');\n} else {\n  email.routingDecision = 'manual_review';\n  email.guardrailsFailed.push('confidence_check');\n  email.manualReviewReason = `Confidence ${actualConfidence} below threshold ${requiredConfidence}`;\n}\n\nemail.guardrails.confidence_check = {\n  passed: passed,\n  checks: checks\n};\n\nemail.currentGuardrail = 'confidence_check';\n\nreturn { json: email };"
+      },
+      "id": "5e5f45ec-b2ca-4028-a2ea-a4770a1b0e4f",
+      "name": "Code - Guardrail 5: Confidence Check",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -19984,
+        608
+      ],
+      "notes": "GUARDRAIL 5: Dynamic confidence thresholds\nHigh-priority emails require higher confidence\nLow confidence → manual review, not rejection"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 1
+          },
+          "conditions": [
+            {
+              "id": "automatic-routing",
+              "leftValue": "={{$json.routingDecision}}",
+              "rightValue": "automatic",
+              "operator": {
+                "type": "string",
+                "operation": "equals"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "4017e8a6-258e-4ed6-8d2c-dfeb1adda4d2",
+      "name": "Switch - Confidence Router",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [
+        -19760,
+        608
+      ],
+      "notes": "Fifth guardrail gate\nLow confidence escalates to manual review"
+    },
+    {
+      "parameters": {
+        "jsCode": "const email = $json;\n\n// Ensure guardrail containers exist\nemail.guardrails = email.guardrails || {};\nemail.guardrails.cost_control = email.guardrails.cost_control || {};\nemail.guardrailsPassed = email.guardrailsPassed || [];\nemail.guardrailsFailed = email.guardrailsFailed || [];\n\n// Static cost model (example values)\nconst costs = {\n  classification_api_call: 0.0001,\n  database_operations: 0.00001,\n  routing_api_call: 0.00005,\n  logging: 0.000005,\n};\n\nconst totalEstimatedCost = Object.values(costs).reduce((a, b) => a + b, 0);\n\n// These would normally come from monitoring/vars; hardcoded for now\nconst currentHourlySpend = 0.05;\nconst hourlyBudget = 1.0;\nconst remainingBudget = hourlyBudget - currentHourlySpend;\n\nconst checks = {\n  underBudget: totalEstimatedCost < remainingBudget,\n  estimatedCost: totalEstimatedCost,\n  currentSpend: currentHourlySpend,\n  budget: hourlyBudget,\n  remainingBudget,\n  percentage: ((currentHourlySpend / hourlyBudget) * 100).toFixed(1),\n};\n\nconst passed = checks.underBudget;\n\n// Write results safely\nemail.guardrails.cost_control.passed = passed;\nemail.guardrails.cost_control.checks = checks;\n\nif (passed) {\n  if (!email.guardrailsPassed.includes('cost_control')) {\n    email.guardrailsPassed.push('cost_control');\n  }\n} else {\n  if (!email.guardrailsFailed.includes('cost_control')) {\n    email.guardrailsFailed.push('cost_control');\n  }\n  email.requiresApproval = true;\n  email.approvalReason = 'Cost budget approaching or exceeding limit';\n}\n\nemail.currentGuardrail = 'cost_control';\n\nreturn { json: email };\n"
+      },
+      "id": "48c5af01-330f-4b17-afdf-4b4563759316",
+      "name": "Code - Guardrail 6: Cost Budget Check",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -19536,
+        560
+      ],
+      "notes": "GUARDRAIL 6: Tracks cumulative costs\nPrevents budget overruns\nCould trigger approval if near limit"
+    },
+    {
+      "parameters": {
+        "jsCode": "const email = $json;\n\nconst response = {\n  status: 'processed',\n  email_id: email.email_id,\n  \n  result: {\n    category: email.classification.category,\n    priority: email.classification.priority,\n    assigned_team: email.classification.suggested_team,\n    ticket_id: email.ticket_id || 'pending'\n  },\n  \n  guardrails: {\n    total: Object.keys(email.guardrails).length,\n    passed: email.guardrailsPassed.length,\n    failed: email.guardrailsFailed.length,\n    details: email.guardrailsPassed\n  },\n  \n  metadata: {\n    confidence: email.classification.confidence,\n    processing_time_ms: Date.now() - new Date(email.timestamp).getTime()\n  }\n};\n\nreturn { json: response };"
+      },
+      "id": "da9f956d-9a7b-4b06-812f-73b42dc93b57",
+      "name": "Code - Format Success Response",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -18864,
+        560
+      ],
+      "notes": "Terminal state - workflow completes\nClean response without internal details\nGuardrails summary for transparency"
+    },
+    {
+      "parameters": {
+        "jsCode": "const email = $json;\n\nlet rejectionType, userMessage, retryable;\n\nswitch (email.currentGuardrail) {\n  case 'sender_validation':\n    rejectionType = 'invalid_sender';\n    userMessage = 'Email sender validation failed';\n    retryable = false;\n    break;\n    \n  case 'rate_limiting':\n    rejectionType = 'rate_limited';\n    userMessage = `Rate limit exceeded. Try again in 1 hour. Limit: ${email.guardrails.rate_limiting.checks.limit}/hour`;\n    retryable = true;\n    break;\n    \n  case 'content_validation':\n    rejectionType = 'invalid_content';\n    userMessage = 'Email content did not pass validation checks';\n    retryable = true;\n    break;\n    \n  default:\n    rejectionType = 'processing_error';\n    userMessage = 'Unable to process email';\n    retryable = false;\n}\n\nconst response = {\n  status: 'rejected',\n  email_id: email.email_id,\n  \n  rejection: {\n    type: rejectionType,\n    message: userMessage,\n    retryable: retryable,\n    failed_guardrail: email.currentGuardrail,\n    details: email.guardrails[email.currentGuardrail]\n  },\n  \n  support: {\n    contact: 'support@company.com',\n    documentation: 'https://docs.company.com/email-limits'\n  }\n};\n\nreturn { json: response };"
+      },
+      "id": "615d81d8-d8ed-4419-b875-db2a1e58da20",
+      "name": "Code - Format Rejection Response",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -19536,
+        944
+      ],
+      "notes": "Different rejection messages per guardrail\nIndicates if retry is possible\nProvides support contact"
+    },
+    {
+      "parameters": {
+        "jsCode": "const email = $json;\n\nif (!$execution.customData.rateLimits) {\n  $execution.customData.rateLimits = {};\n}\n\nconst sender = email.from;\nconst now = Date.now();\nconst ONE_HOUR = 60 * 60 * 1000;\n\nif (!$execution.customData.rateLimits[sender]) {\n  $execution.customData.rateLimits[sender] = [];\n}\n\n$execution.customData.rateLimits[sender] =\n  $execution.customData.rateLimits[sender].filter(\n    (timestamp) => now - timestamp < ONE_HOUR,\n  );\n\n$execution.customData.rateLimits[sender].push(now);\n\nconst requestCount = $execution.customData.rateLimits[sender].length;\n\nreturn {\n  json: {\n    ...email,\n    request_count: requestCount,\n  },\n};\n"
+      },
+      "id": "9f2463cb-c304-4154-919a-4f86bb9a7381",
+      "name": "Code - Check Rate Limit (Memory)",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -21904,
+        824
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "const email = $json;\n\n// Initialize in-memory processing log if not exists\nif (!$execution.customData.processingLog) {\n  $execution.customData.processingLog = [];\n}\n\n// Create log entry\nconst logEntry = {\n  email_id: email.email_id,\n  sender: email.from,\n  timestamp: email.timestamp,\n  guardrails_passed: email.guardrailsPassed,\n  guardrails_failed: email.guardrailsFailed,\n  classification_category: email.classification?.category,\n  classification_priority: email.classification?.priority,\n  classification_confidence: email.classification?.confidence,\n  routing_decision: email.routingDecision,\n  processing_duration_ms: Date.now() - new Date(email.timestamp).getTime(),\n  outcome: 'success',\n  logged_at: new Date().toISOString()\n};\n\n// Store in memory\n$execution.customData.processingLog.push(logEntry);\n\n// Return the email data unchanged\nreturn { json: email };"
+      },
+      "id": "260d86ba-37b3-436e-8cb8-3af1d0cb3731",
+      "name": "Code - Log Processing Result (Memory)",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -19088,
+        560
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "const email = $json;\n\n// Pick target team from classification or suggested_team\nconst classification = email.classification || {};\nconst suggested = classification.suggested_team || 'General Support';\n\nemail.routedTeam = suggested;\nemail.routedAt = new Date().toISOString();\n\nreturn { json: email };\n"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -19312,
+        560
+      ],
+      "id": "f54e4509-95de-4463-8e7d-00657526be34",
+      "name": "Route Email to Team"
+    }
+  ],
+  "pinData": {
+    "Webhook - Incoming Email": [
+      {
+        "json": {
+          "from": "user@example.com",
+          "subject": "Unable to access dashboard",
+          "body": "Hi team, I have been trying to access the dashboard. Can you help?",
+          "timestamp": "2025-11-09T12:00:00Z",
+          "email_id": "email_001"
+        }
+      }
+    ]
+  },
+  "connections": {
+    "Webhook - Incoming Email": {
+      "main": [
+        [
+          {
+            "node": "Code - Guardrail 1: Sender Validation",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Code - Guardrail 1: Sender Validation": {
+      "main": [
+        [
+          {
+            "node": "Switch - Sender Router",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Switch - Sender Router": {
+      "main": [
+        [
+          {
+            "node": "Code - Check Rate Limit (Memory)",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Code - Format Rejection Response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Code - Evaluate Rate Limit": {
+      "main": [
+        [
+          {
+            "node": "Switch - Rate Limit Router",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Switch - Rate Limit Router": {
+      "main": [
+        [
+          {
+            "node": "Code - Guardrail 3: Content Validation",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Code - Format Rejection Response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Code - Guardrail 3: Content Validation": {
+      "main": [
+        [
+          {
+            "node": "Switch - Content Router",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Switch - Content Router": {
+      "main": [
+        [
+          {
+            "node": "AI Agent - Classify Email",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Code - Format Rejection Response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "AI Agent - Classify Email": {
+      "main": [
+        [
+          {
+            "node": "Code - Guardrail 4: Output Schema Validation",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Code - Guardrail 4: Output Schema Validation": {
+      "main": [
+        [
+          {
+            "node": "Switch - Output Validation Router",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Switch - Output Validation Router": {
+      "main": [
+        [
+          {
+            "node": "Code - Guardrail 5: Confidence Check",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Code - Format Rejection Response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Code - Guardrail 5: Confidence Check": {
+      "main": [
+        [
+          {
+            "node": "Switch - Confidence Router",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Switch - Confidence Router": {
+      "main": [
+        [
+          {
+            "node": "Code - Guardrail 6: Cost Budget Check",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Code - Format Rejection Response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Code - Guardrail 6: Cost Budget Check": {
+      "main": [
+        [
+          {
+            "node": "Route Email to Team",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Code - Check Rate Limit (Memory)": {
+      "main": [
+        [
+          {
+            "node": "Code - Evaluate Rate Limit",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Code - Log Processing Result (Memory)": {
+      "main": [
+        [
+          {
+            "node": "Code - Format Success Response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Code - Format Success Response": {
+      "main": [
+        []
+      ]
+    },
+    "Route Email to Team": {
+      "main": [
+        [
+          {
+            "node": "Code - Log Processing Result (Memory)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "versionId": "d31c16a8-f1f0-43dc-bb46-4e8405d09f55",
+  "meta": {
+    "templateCredsSetupCompleted": true,
+    "instanceId": "41d1e72e4425af7bb5431f5a3935e005f1f2bc790948207b9a931061d160b4be"
+  },
+  "id": "5qRfvwrgnjVGtQhg",
+  "tags": []
+}

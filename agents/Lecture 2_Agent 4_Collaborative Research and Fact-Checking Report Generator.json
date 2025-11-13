@@ -1,0 +1,273 @@
+{
+  "name": "Collaborative Research and Fact-Checking Report Generator",
+  "nodes": [
+    {
+      "parameters": {},
+      "id": "d6a71def-0949-475e-9d5e-59d5108d55e8",
+      "name": "Manual Trigger",
+      "type": "n8n-nodes-base.manualTrigger",
+      "typeVersion": 1,
+      "position": [
+        0,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "id-1",
+              "name": "researchTopic",
+              "value": "Artificial Intelligence in Healthcare",
+              "type": "string"
+            }
+          ]
+        },
+        "includeOtherFields": true,
+        "options": {}
+      },
+      "id": "bd43f49f-ce83-4f0d-8fd3-f92261b780cc",
+      "name": "Workflow Configuration",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        224,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "toolDescription": "Research Agent that gathers comprehensive information from Wikipedia and web sources about any topic",
+        "text": "=Research the following topic thoroughly using Wikipedia and web search tools. Gather key facts, statistics, recent developments, and important context. Topic: {{ $fromAI(\"research_topic\", \"The topic to research\") }}",
+        "options": {}
+      },
+      "id": "e6fbb0ca-b46f-4424-9626-3b85749bde30",
+      "name": "Research Agent Tool",
+      "type": "@n8n/n8n-nodes-langchain.agentTool",
+      "typeVersion": 2.2,
+      "position": [
+        448,
+        224
+      ]
+    },
+    {
+      "parameters": {
+        "toolDescription": "Fact-Checking Agent that verifies claims, statistics, and information using reliable sources like Wikipedia and web search",
+        "text": "={{ 'Fact-check the following information using Wikipedia and web search. Verify claims, cross-reference statistics, and identify any inaccuracies or outdated information. Information to verify: ' + $fromAI('information_to_verify', 'The information or claims to fact-check') }}",
+        "options": {}
+      },
+      "id": "ffbec9bc-440c-411d-a2d3-3086a8346ac8",
+      "name": "Fact-Checking Agent Tool",
+      "type": "@n8n/n8n-nodes-langchain.agentTool",
+      "typeVersion": 2.2,
+      "position": [
+        744,
+        224
+      ]
+    },
+    {
+      "parameters": {
+        "toolDescription": "Report Writing Agent that compiles research findings and fact-checked information into comprehensive, well-structured reports",
+        "text": "=Compile the following research findings and fact-checked information into a comprehensive, well-structured report. Include an executive summary, main findings, verified facts, and conclusions. Content to compile: {{ $fromAI(\"content_to_compile\", \"The research findings and verified information to include in the report\") }}",
+        "options": {}
+      },
+      "id": "bddee96a-4dcc-4d21-af65-3f84a4a52f98",
+      "name": "Report Writing Agent Tool",
+      "type": "@n8n/n8n-nodes-langchain.agentTool",
+      "typeVersion": 2.2,
+      "position": [
+        1032,
+        224
+      ]
+    },
+    {
+      "parameters": {
+        "promptType": "define",
+        "text": "=You are a Coordinator Agent managing a team of specialized AI agents to research topics, fact-check information, and compile comprehensive reports.\n\nYour team consists of:\n1. Research Agent - Gathers information from Wikipedia and web sources\n2. Fact-Checking Agent - Verifies claims and cross-references information\n3. Report Writing Agent - Compiles findings into well-structured reports\n\nResearch Topic: {{ $json.researchTopic }}\n\nYour task:\n1. First, use the Research Agent to gather comprehensive information about the topic\n2. Then, use the Fact-Checking Agent to verify key claims and statistics\n3. Finally, use the Report Writing Agent to compile everything into a detailed, well-structured report\n\nProvide the final comprehensive report.",
+        "options": {}
+      },
+      "id": "6f2145c2-7249-4344-9a39-6c417551d63c",
+      "name": "Coordinator Agent",
+      "type": "@n8n/n8n-nodes-langchain.agent",
+      "typeVersion": 3,
+      "position": [
+        480,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "model": "llama-3.1-8b-instant",
+        "options": {}
+      },
+      "type": "@n8n/n8n-nodes-langchain.lmChatGroq",
+      "typeVersion": 1,
+      "position": [
+        552,
+        432
+      ],
+      "id": "9904ec4a-37ff-4c15-8fbd-9a1190ea1ca3",
+      "name": "Groq Chat Model",
+      "credentials": {
+        "groqApi": {
+          "id": "rxfCuSwhKG7mpJJa",
+          "name": "Groq account"
+        }
+      }
+    },
+    {
+      "parameters": {},
+      "id": "ed8de356-c71f-4657-aad5-17a07dd42a08",
+      "name": "Wikipedia_Tool",
+      "type": "@n8n/n8n-nodes-langchain.toolWikipedia",
+      "typeVersion": 1,
+      "position": [
+        680,
+        432
+      ]
+    },
+    {
+      "parameters": {
+        "toolDescription": "Search the web for current information and recent developments",
+        "url": "=https://api.duckduckgo.com/?q={{ $fromAI(\"search_query\", \"The search query\") }}&format=json",
+        "options": {}
+      },
+      "id": "17d25979-5737-430e-839d-5e8e36d36fbc",
+      "name": "Web_Search_Tool",
+      "type": "n8n-nodes-base.httpRequestTool",
+      "typeVersion": 4.3,
+      "position": [
+        808,
+        432
+      ]
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "Manual Trigger": {
+      "main": [
+        [
+          {
+            "node": "Workflow Configuration",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Workflow Configuration": {
+      "main": [
+        [
+          {
+            "node": "Coordinator Agent",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Research Agent Tool": {
+      "ai_tool": [
+        [
+          {
+            "node": "Coordinator Agent",
+            "type": "ai_tool",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Fact-Checking Agent Tool": {
+      "ai_tool": [
+        [
+          {
+            "node": "Coordinator Agent",
+            "type": "ai_tool",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Report Writing Agent Tool": {
+      "ai_tool": [
+        [
+          {
+            "node": "Coordinator Agent",
+            "type": "ai_tool",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Groq Chat Model": {
+      "ai_languageModel": [
+        [
+          {
+            "node": "Coordinator Agent",
+            "type": "ai_languageModel",
+            "index": 0
+          },
+          {
+            "node": "Research Agent Tool",
+            "type": "ai_languageModel",
+            "index": 0
+          },
+          {
+            "node": "Fact-Checking Agent Tool",
+            "type": "ai_languageModel",
+            "index": 0
+          },
+          {
+            "node": "Report Writing Agent Tool",
+            "type": "ai_languageModel",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Wikipedia_Tool": {
+      "ai_tool": [
+        [
+          {
+            "node": "Research Agent Tool",
+            "type": "ai_tool",
+            "index": 0
+          },
+          {
+            "node": "Fact-Checking Agent Tool",
+            "type": "ai_tool",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Web_Search_Tool": {
+      "ai_tool": [
+        [
+          {
+            "node": "Research Agent Tool",
+            "type": "ai_tool",
+            "index": 0
+          },
+          {
+            "node": "Fact-Checking Agent Tool",
+            "type": "ai_tool",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "versionId": "b87f5534-5b01-4341-842d-3240565fb47c",
+  "meta": {
+    "templateCredsSetupCompleted": true,
+    "instanceId": "41d1e72e4425af7bb5431f5a3935e005f1f2bc790948207b9a931061d160b4be"
+  },
+  "id": "CVAOtv1xBddzCWaU",
+  "tags": []
+}

@@ -1,0 +1,367 @@
+{
+  "name": "Lecture 2 Demo: Tool Design Workshop",
+  "nodes": [
+    {
+      "parameters": {
+        "content": "## Tool Design Workshop\n\n**NEW IN LECTURE 2:**\n- Tool contract design\n- Input validation\n- Error handling patterns\n- Output standardization\n\n**This workflow shows:**\n3 example tools with different complexity levels:\n1. Simple tool (data lookup)\n2. Complex tool (API integration)\n3. Composite tool (uses other tools)\n\nEach demonstrates best practices from Lecture 2!",
+        "height": 380,
+        "width": 450
+      },
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        -1248,
+        400
+      ],
+      "id": "ba527e56-02d8-4fb8-9e65-766ea83d4875",
+      "name": "Sticky Note"
+    },
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "tool-workshop",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 1,
+      "position": [
+        -752,
+        608
+      ],
+      "id": "8ab3c014-c0bb-4bb7-93d9-94711d9dce48",
+      "webhookId": "tool-workshop-demo",
+      "name": "Tool Call Request"
+    },
+    {
+      "parameters": {
+        "content": "## Tool 1: Simple Data Lookup\n\n**get_user_profile(user_id)**\n\nDemonstrates:\n- Input validation\n- Clear error messages\n- Consistent output format\n- Documentation\n\nThis is the foundation pattern all tools should follow.",
+        "height": 240,
+        "width": 300
+      },
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        -400,
+        304
+      ],
+      "id": "51d8a585-344c-4cae-a447-2c4a68d157fe",
+      "name": "Sticky Note1"
+    },
+    {
+      "parameters": {
+        "jsCode": "// ============================================\n// TOOL: get_user_profile\n// ============================================\n// Purpose: Retrieve user profile information\n// Input: { user_id: string }\n// Output: { success: boolean, data?: object, error?: string }\n// ============================================\n\n// STEP 1: Input Validation\nconst userId = $input.item.json.parameters?.user_id;\n\nif (!userId) {\n  return {\n    json: {\n      success: false,\n      error: \"Missing required parameter: user_id\",\n      error_code: \"MISSING_PARAMETER\",\n      tool_name: \"get_user_profile\"\n    }\n  };\n}\n\nif (typeof userId !== 'string') {\n  return {\n    json: {\n      success: false,\n      error: \"Parameter user_id must be a string\",\n      error_code: \"INVALID_TYPE\",\n      tool_name: \"get_user_profile\"\n    }\n  };\n}\n\nif (userId.length < 3) {\n  return {\n    json: {\n      success: false,\n      error: \"Parameter user_id must be at least 3 characters\",\n      error_code: \"INVALID_LENGTH\",\n      tool_name: \"get_user_profile\"\n    }\n  };\n}\n\n// STEP 2: Business Logic (simulated database lookup)\nconst userDatabase = {\n  \"user001\": {\n    id: \"user001\",\n    name: \"Alice Johnson\",\n    email: \"alice@company.com\",\n    role: \"Product Manager\",\n    department: \"Product\",\n    joined: \"2023-01-15\"\n  },\n  \"user002\": {\n    id: \"user002\",\n    name: \"Bob Smith\",\n    email: \"bob@company.com\",\n    role: \"Software Engineer\",\n    department: \"Engineering\",\n    joined: \"2022-06-20\"\n  },\n  \"user003\": {\n    id: \"user003\",\n    name: \"Carol White\",\n    email: \"carol@company.com\",\n    role: \"Designer\",\n    department: \"Design\",\n    joined: \"2023-03-10\"\n  }\n};\n\nconst user = userDatabase[userId];\n\n// STEP 3: Return Standardized Output\nif (user) {\n  return {\n    json: {\n      success: true,\n      data: user,\n      tool_name: \"get_user_profile\",\n      execution_time_ms: 50 // Simulated\n    }\n  };\n} else {\n  return {\n    json: {\n      success: false,\n      error: `User not found: ${userId}`,\n      error_code: \"USER_NOT_FOUND\",\n      tool_name: \"get_user_profile\",\n      execution_time_ms: 50\n    }\n  };\n}\n\n// ============================================\n// TOOL DESIGN PRINCIPLES DEMONSTRATED:\n// 1. Validate all inputs early\n// 2. Use clear error codes\n// 3. Return consistent structure\n// 4. Include execution metadata\n// 5. Document in comments\n// ============================================"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -352,
+        432
+      ],
+      "id": "2f5cb602-4106-4f08-8389-0be10aca2e48",
+      "name": "TOOL 1: get_user_profile (Simple)"
+    },
+    {
+      "parameters": {
+        "content": "## Tool 2: API Integration\n\n**calculate_shipping_cost(from_zip, to_zip, weight)**\n\nDemonstrates:\n- Multiple parameter validation\n- External API patterns\n- Retry logic\n- Timeout handling\n- Rate limiting\n\nShows how to wrap third-party APIs safely.",
+        "height": 260,
+        "width": 300
+      },
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        -400,
+        592
+      ],
+      "id": "46cb9c8d-15bd-4984-97b1-04c61841c1c6",
+      "name": "Sticky Note2"
+    },
+    {
+      "parameters": {
+        "jsCode": "// ============================================\n// TOOL: calculate_shipping_cost\n// ============================================\n// Purpose: Calculate shipping cost between zip codes\n// Input: { from_zip: string, to_zip: string, weight_lbs: number }\n// Output: { success: boolean, data?: object, error?: string }\n// ============================================\n\nconst params = $input.item.json.parameters || {};\n\n// STEP 1: Comprehensive Input Validation\nconst validationErrors = [];\n\nif (!params.from_zip) {\n  validationErrors.push(\"Missing required parameter: from_zip\");\n}\nif (!params.to_zip) {\n  validationErrors.push(\"Missing required parameter: to_zip\");\n}\nif (params.weight_lbs === undefined) {\n  validationErrors.push(\"Missing required parameter: weight_lbs\");\n}\n\n// Validate zip code format (simple check)\nconst zipRegex = /^\\d{5}$/;\nif (params.from_zip && !zipRegex.test(params.from_zip)) {\n  validationErrors.push(\"Invalid from_zip format (expected 5 digits)\");\n}\nif (params.to_zip && !zipRegex.test(params.to_zip)) {\n  validationErrors.push(\"Invalid to_zip format (expected 5 digits)\");\n}\n\n// Validate weight\nif (params.weight_lbs !== undefined) {\n  if (typeof params.weight_lbs !== 'number') {\n    validationErrors.push(\"weight_lbs must be a number\");\n  } else if (params.weight_lbs <= 0) {\n    validationErrors.push(\"weight_lbs must be positive\");\n  } else if (params.weight_lbs > 150) {\n    validationErrors.push(\"weight_lbs exceeds maximum (150 lbs)\");\n  }\n}\n\nif (validationErrors.length > 0) {\n  return {\n    json: {\n      success: false,\n      error: validationErrors.join(\"; \"),\n      error_code: \"VALIDATION_ERROR\",\n      tool_name: \"calculate_shipping_cost\",\n      validation_errors: validationErrors\n    }\n  };\n}\n\n// STEP 2: Simulate API Call with Error Scenarios\n// In production, this would be an actual HTTP request\nconst startTime = Date.now();\n\ntry {\n  // Simulate network delay\n  const delay = Math.random() * 200 + 100; // 100-300ms\n  \n  // Simulate 5% error rate\n  if (Math.random() < 0.05) {\n    throw new Error(\"API temporarily unavailable\");\n  }\n  \n  // STEP 3: Calculate Shipping (simplified logic)\n  const distance = Math.abs(parseInt(params.from_zip.slice(0,3)) - parseInt(params.to_zip.slice(0,3))) * 10; // Rough miles\n  const baseCost = 5.00;\n  const perMileCost = 0.10;\n  const perPoundCost = 0.50;\n  \n  const totalCost = baseCost + (distance * perMileCost) + (params.weight_lbs * perPoundCost);\n  const estimatedDays = Math.ceil(distance / 500) + 1; // Rough estimate\n  \n  // STEP 4: Return Enriched Response\n  return {\n    json: {\n      success: true,\n      data: {\n        cost_usd: parseFloat(totalCost.toFixed(2)),\n        currency: \"USD\",\n        estimated_days: estimatedDays,\n        distance_miles: distance,\n        breakdown: {\n          base_cost: baseCost,\n          distance_cost: parseFloat((distance * perMileCost).toFixed(2)),\n          weight_cost: parseFloat((params.weight_lbs * perPoundCost).toFixed(2))\n        }\n      },\n      tool_name: \"calculate_shipping_cost\",\n      execution_time_ms: Math.round(delay),\n      api_version: \"v1\"\n    }\n  };\n  \n} catch (error) {\n  // STEP 5: Graceful Error Handling\n  return {\n    json: {\n      success: false,\n      error: error.message,\n      error_code: \"API_ERROR\",\n      tool_name: \"calculate_shipping_cost\",\n      execution_time_ms: Date.now() - startTime,\n      retry_recommended: true\n    }\n  };\n}\n\n// ============================================\n// ADVANCED TOOL DESIGN DEMONSTRATED:\n// 1. Multi-parameter validation\n// 2. Format validation (regex)\n// 3. Range checking\n// 4. Error simulation for testing\n// 5. Detailed breakdown in response\n// 6. Execution time tracking\n// 7. Retry recommendations\n// ============================================"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -352,
+        704
+      ],
+      "id": "3ed92826-7781-4021-a157-8b8d4f42ef9d",
+      "name": "TOOL 2: calculate_shipping_cost (Complex)"
+    },
+    {
+      "parameters": {
+        "content": "## Tool 3: Composite Tool\n\n**get_user_shipping_estimate(user_id, destination_zip)**\n\nDemonstrates:\n- Calling other tools\n- Data transformation\n- Error propagation\n- Dependency management\n\nShows how tools can build on each other (composition pattern).",
+        "height": 260,
+        "width": 300
+      },
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        -400,
+        880
+      ],
+      "id": "ec55a07d-38dd-4c93-8b97-d4b24f1b5631",
+      "name": "Sticky Note3"
+    },
+    {
+      "parameters": {
+        "jsCode": "// ============================================\n// TOOL: get_user_shipping_estimate (Composite)\n// ============================================\n// Purpose: Get shipping estimate for a user to destination\n// This tool USES other tools (composition pattern)\n// Input: { user_id: string, destination_zip: string }\n// Output: { success: boolean, data?: object, error?: string }\n// ============================================\n\nconst params = $input.item.json.parameters || {};\n\n// STEP 1: Validate inputs\nif (!params.user_id) {\n  return {\n    json: {\n      success: false,\n      error: \"Missing required parameter: user_id\",\n      error_code: \"MISSING_PARAMETER\",\n      tool_name: \"get_user_shipping_estimate\"\n    }\n  };\n}\n\nif (!params.destination_zip) {\n  return {\n    json: {\n      success: false,\n      error: \"Missing required parameter: destination_zip\",\n      error_code: \"MISSING_PARAMETER\",\n      tool_name: \"get_user_shipping_estimate\"\n    }\n  };\n}\n\n// STEP 2: Call Tool 1 to get user profile\n// In n8n, this would be a separate node, but we'll simulate here\nconst userDatabase = {\n  \"user001\": {\n    id: \"user001\",\n    name: \"Alice Johnson\",\n    shipping_address: {\n      zip: \"10001\",\n      state: \"NY\"\n    }\n  },\n  \"user002\": {\n    id: \"user002\",\n    name: \"Bob Smith\",\n    shipping_address: {\n      zip: \"90210\",\n      state: \"CA\"\n    }\n  }\n};\n\nconst user = userDatabase[params.user_id];\n\nif (!user) {\n  return {\n    json: {\n      success: false,\n      error: `User not found: ${params.user_id}`,\n      error_code: \"USER_NOT_FOUND\",\n      tool_name: \"get_user_shipping_estimate\",\n      dependency_failed: \"get_user_profile\"\n    }\n  };\n}\n\n// STEP 3: Call Tool 2 to calculate shipping\n// Assume standard package weight of 2 lbs\nconst fromZip = user.shipping_address.zip;\nconst toZip = params.destination_zip;\nconst weight = params.weight_lbs || 2.0;\n\n// Simulate shipping calculation (reusing logic from tool 2)\nconst distance = Math.abs(parseInt(fromZip.slice(0,3)) - parseInt(toZip.slice(0,3))) * 10;\nconst baseCost = 5.00;\nconst totalCost = baseCost + (distance * 0.10) + (weight * 0.50);\nconst estimatedDays = Math.ceil(distance / 500) + 1;\n\n// STEP 4: Compose enriched response\nreturn {\n  json: {\n    success: true,\n    data: {\n      user: {\n        id: user.id,\n        name: user.name,\n        from_zip: fromZip\n      },\n      shipping: {\n        to_zip: toZip,\n        cost_usd: parseFloat(totalCost.toFixed(2)),\n        estimated_days: estimatedDays,\n        distance_miles: distance\n      },\n      recommendation: totalCost < 10 \n        ? \"Standard shipping recommended\" \n        : \"Consider slower shipping for cost savings\"\n    },\n    tool_name: \"get_user_shipping_estimate\",\n    tools_used: [\"get_user_profile\", \"calculate_shipping_cost\"],\n    execution_time_ms: 120 // Simulated\n  }\n};\n\n// ============================================\n// COMPOSITE TOOL PRINCIPLES:\n// 1. Depends on other tools\n// 2. Transforms and enriches data\n// 3. Handles dependency failures\n// 4. Provides higher-level abstractions\n// 5. Tracks which tools were used\n// ============================================"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -352,
+        992
+      ],
+      "id": "0acbbcc7-3946-4345-a10f-2b879a770d2c",
+      "name": "TOOL 3: get_user_shipping_estimate (Composite)"
+    },
+    {
+      "parameters": {},
+      "type": "n8n-nodes-base.merge",
+      "typeVersion": 2.1,
+      "position": [
+        -144,
+        704
+      ],
+      "id": "45cfe447-ccb7-47ce-88fe-33ff933c67a4",
+      "name": "Merge Tool Results"
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ $json }}",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1,
+      "position": [
+        64,
+        704
+      ],
+      "id": "e3983556-74de-47e0-99cc-396e74e7acf5",
+      "name": "Return Tool Result"
+    },
+    {
+      "parameters": {
+        "content": "## Tool Design Best Practices\n\nFrom Lecture 2:\n\n**1. Contract Design**\n- Clear purpose\n- Documented parameters\n- Specified return type\n- Version information\n\n**2. Validation**\n- Type checking\n- Range validation\n- Format validation\n- Required vs optional\n\n**3. Error Handling**\n- Consistent error format\n- Error codes\n- Helpful error messages\n- Retry recommendations\n\n**4. Output Structure**\n```json\n{\n  \"success\": boolean,\n  \"data\": {} or null,\n  \"error\": string or null,\n  \"error_code\": string,\n  \"tool_name\": string,\n  \"execution_time_ms\": number\n}\n```\n\n**5. Documentation**\n- In-code comments\n- Purpose statement\n- Input/output schemas\n- Example usage",
+        "height": 640,
+        "width": 380
+      },
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        0,
+        0
+      ],
+      "id": "59d4e335-0ec5-4c36-a2fd-6c45dd8fc3fb",
+      "name": "Sticky Note4"
+    },
+    {
+      "parameters": {
+        "content": "## Testing These Tools\n\n**Test Tool 1:**\n```json\n{\n  \"tool_name\": \"get_user_profile\",\n  \"parameters\": {\n    \"user_id\": \"user001\"\n  }\n}\n```\n\n**Test Tool 2:**\n```json\n{\n  \"tool_name\": \"calculate_shipping_cost\",\n  \"parameters\": {\n    \"from_zip\": \"10001\",\n    \"to_zip\": \"90210\",\n    \"weight_lbs\": 5.5\n  }\n}\n```\n\n**Test Tool 3:**\n```json\n{\n  \"tool_name\": \"get_user_shipping_estimate\",\n  \"parameters\": {\n    \"user_id\": \"user001\",\n    \"destination_zip\": \"90210\"\n  }\n}\n```\n\n**Test Error Cases:**\n```json\n{\n  \"tool_name\": \"get_user_profile\",\n  \"parameters\": {\n    \"user_id\": \"invalid\"\n  }\n}\n```\n\n```json\n{\n  \"tool_name\": \"calculate_shipping_cost\",\n  \"parameters\": {\n    \"from_zip\": \"abc\",\n    \"to_zip\": \"90210\",\n    \"weight_lbs\": -5\n  }\n}\n```",
+        "height": 988,
+        "width": 652
+      },
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        400,
+        0
+      ],
+      "id": "3145971d-9a89-4676-9520-2e31183ca1a8",
+      "name": "Sticky Note5"
+    },
+    {
+      "parameters": {
+        "rules": {
+          "values": [
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 2
+                },
+                "conditions": [
+                  {
+                    "id": "4806088f-7c20-4bc3-8efb-7b0cfcde70d0",
+                    "leftValue": "={{ $json.tool_name }}",
+                    "rightValue": "get_user_profile",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals",
+                      "name": "filter.operator.equals"
+                    }
+                  }
+                ],
+                "combinator": "and"
+              }
+            },
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 2
+                },
+                "conditions": [
+                  {
+                    "leftValue": "={{ $json.tool_name }}",
+                    "rightValue": "calculate_shipping_cost",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    },
+                    "id": "01f84c42-3639-40cb-a946-f698bfa540e6"
+                  }
+                ],
+                "combinator": "and"
+              }
+            },
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 2
+                },
+                "conditions": [
+                  {
+                    "id": "7b7137c0-364c-4f1a-94ec-8ad593ccbf95",
+                    "leftValue": "={{ $json.tool_name }}",
+                    "rightValue": "get_user_shipping_estimate",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals",
+                      "name": "filter.operator.equals"
+                    }
+                  }
+                ],
+                "combinator": "and"
+              }
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.switch",
+      "typeVersion": 3.3,
+      "position": [
+        -560,
+        592
+      ],
+      "id": "a41b9dd0-2db7-4ac6-922f-6456f218c515",
+      "name": "Switch"
+    }
+  ],
+  "pinData": {
+    "Tool Call Request": [
+      {
+        "json": {
+          "tool_name": "get_user_shipping_estimate",
+          "parameters": {
+            "user_id": "user001",
+            "destination_zip": "90210"
+          }
+        }
+      }
+    ]
+  },
+  "connections": {
+    "Tool Call Request": {
+      "main": [
+        [
+          {
+            "node": "Switch",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "TOOL 1: get_user_profile (Simple)": {
+      "main": [
+        [
+          {
+            "node": "Merge Tool Results",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "TOOL 2: calculate_shipping_cost (Complex)": {
+      "main": [
+        [
+          {
+            "node": "Merge Tool Results",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "TOOL 3: get_user_shipping_estimate (Composite)": {
+      "main": [
+        [
+          {
+            "node": "Merge Tool Results",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Merge Tool Results": {
+      "main": [
+        [
+          {
+            "node": "Return Tool Result",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Switch": {
+      "main": [
+        [
+          {
+            "node": "TOOL 1: get_user_profile (Simple)",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "TOOL 2: calculate_shipping_cost (Complex)",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "TOOL 3: get_user_shipping_estimate (Composite)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "versionId": "0889e955-b8ff-4e8d-87ac-adffcd3329d3",
+  "meta": {
+    "instanceId": "41d1e72e4425af7bb5431f5a3935e005f1f2bc790948207b9a931061d160b4be"
+  },
+  "id": "c95b9TQaqbp525ln",
+  "tags": []
+}

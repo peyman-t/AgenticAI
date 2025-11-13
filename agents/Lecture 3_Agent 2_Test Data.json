@@ -1,0 +1,142 @@
+{
+  "valid_technical_email": {
+    "from": "user@example.com",
+    "subject": "Unable to access dashboard",
+    "body": "Hi team, I've been trying to access the dashboard for the past hour but keep getting a 500 error. Can you help? Thanks!",
+    "timestamp": "2025-11-09T12:00:00Z",
+    "email_id": "email_001"
+  },
+  "valid_billing_email": {
+    "from": "customer@company.org",
+    "subject": "Question about my invoice",
+    "body": "Hello, I received invoice #12345 but there seems to be a charge I don't recognize. Could you please review the itemized charges and let me know what this is for?",
+    "timestamp": "2025-11-09T12:05:00Z",
+    "email_id": "email_002"
+  },
+  "valid_account_email": {
+    "from": "john.doe@business.net",
+    "subject": "Password reset not working",
+    "body": "I've tried to reset my password multiple times but I'm not receiving the reset email. I've checked spam folder. My account email is john.doe@business.net",
+    "timestamp": "2025-11-09T12:10:00Z",
+    "email_id": "email_003"
+  },
+  "valid_feature_request": {
+    "from": "product.manager@startup.io",
+    "subject": "Feature request: Dark mode",
+    "body": "Would love to see a dark mode option added to the application. Many of our users work late hours and this would significantly improve their experience. Are there plans for this?",
+    "timestamp": "2025-11-09T12:15:00Z",
+    "email_id": "email_004"
+  },
+  "valid_general_inquiry": {
+    "from": "info@partner.com",
+    "subject": "Partnership opportunities",
+    "body": "We are interested in exploring potential partnership opportunities with your company. Could you direct me to the right person to discuss this further?",
+    "timestamp": "2025-11-09T12:20:00Z",
+    "email_id": "email_005"
+  },
+  "invalid_sender_no_domain": {
+    "from": "invalidemail",
+    "subject": "Test",
+    "body": "This should fail sender validation",
+    "timestamp": "2025-11-09T12:25:00Z",
+    "email_id": "email_006"
+  },
+  "invalid_sender_blacklisted": {
+    "from": "spammer@spam.com",
+    "subject": "Amazing offer",
+    "body": "Check out this amazing deal",
+    "timestamp": "2025-11-09T12:30:00Z",
+    "email_id": "email_007"
+  },
+  "invalid_sender_bounce": {
+    "from": "mailer-daemon@mail.example.com",
+    "subject": "Delivery failure",
+    "body": "Your message could not be delivered",
+    "timestamp": "2025-11-09T12:35:00Z",
+    "email_id": "email_008"
+  },
+  "invalid_sender_noreply": {
+    "from": "noreply@system.com",
+    "subject": "Notification",
+    "body": "This is an automated notification",
+    "timestamp": "2025-11-09T12:40:00Z",
+    "email_id": "email_009"
+  },
+  "invalid_content_empty_body": {
+    "from": "valid@email.com",
+    "subject": "Empty email",
+    "body": "",
+    "timestamp": "2025-11-09T12:45:00Z",
+    "email_id": "email_010"
+  },
+  "invalid_content_empty_subject": {
+    "from": "valid@email.com",
+    "subject": "",
+    "body": "This email has no subject line",
+    "timestamp": "2025-11-09T12:50:00Z",
+    "email_id": "email_011"
+  },
+  "invalid_content_too_short": {
+    "from": "valid@email.com",
+    "subject": "Hi",
+    "body": "Ok",
+    "timestamp": "2025-11-09T12:55:00Z",
+    "email_id": "email_012"
+  },
+  "invalid_content_xss_attempt": {
+    "from": "attacker@test.com",
+    "subject": "Check this out",
+    "body": "Please review this: <script>alert('xss')</script> link",
+    "timestamp": "2025-11-09T13:00:00Z",
+    "email_id": "email_013"
+  },
+  "invalid_content_sql_injection": {
+    "from": "attacker@test.com",
+    "subject": "Database query",
+    "body": "Can you help me with this query: DROP TABLE users; --",
+    "timestamp": "2025-11-09T13:05:00Z",
+    "email_id": "email_014"
+  },
+  "invalid_content_spam": {
+    "from": "spammer@example.com",
+    "subject": "YOU ARE A WINNER! CLICK HERE NOW!",
+    "body": "Congratulations! You've won a prize! Click here to claim your FREE casino bonus! Limited time offer for viagra!",
+    "timestamp": "2025-11-09T13:10:00Z",
+    "email_id": "email_015"
+  },
+  "invalid_content_too_long": {
+    "from": "valid@email.com",
+    "subject": "Very long email",
+    "body": "Lorem ipsum dolor sit amet, consectetur adipiscing elit. ".repeat(500),
+    "timestamp": "2025-11-09T13:15:00Z",
+    "email_id": "email_016"
+  },
+  "valid_high_priority": {
+    "from": "urgent@client.com",
+    "subject": "Production system down",
+    "body": "Our production system has been down for 15 minutes. All users are unable to access the application. This is a critical issue affecting our business operations. Please escalate immediately.",
+    "timestamp": "2025-11-09T13:20:00Z",
+    "email_id": "email_017"
+  },
+  "valid_medium_priority": {
+    "from": "user@business.com",
+    "subject": "Report generation failing",
+    "body": "The monthly report generator has been failing for the past two days. Not urgent but we need it fixed before month end. Error message: 'Unable to connect to database'",
+    "timestamp": "2025-11-09T13:25:00Z",
+    "email_id": "email_018"
+  },
+  "valid_low_priority": {
+    "from": "user@example.org",
+    "subject": "Documentation typo",
+    "body": "I noticed a small typo in your API documentation on page 5. The endpoint is listed as /api/v1/user but should be /api/v2/user. Just wanted to let you know.",
+    "timestamp": "2025-11-09T13:30:00Z",
+    "email_id": "email_019"
+  },
+  "edge_case_minimal_valid": {
+    "from": "a@b.co",
+    "subject": "Hi",
+    "body": "Can you help me?",
+    "timestamp": "2025-11-09T13:35:00Z",
+    "email_id": "email_020"
+  }
+}

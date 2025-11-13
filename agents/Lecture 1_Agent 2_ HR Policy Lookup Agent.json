@@ -1,0 +1,303 @@
+{
+  "name": "Lecture 1 Demo: HR Policy Lookup Agent (Fixed with Memory)",
+  "nodes": [
+    {
+      "parameters": {
+        "content": "## HR Policy Lookup Agent\n\n**Purpose:** Demonstrates memory and RAG pattern\n\n**What it does:**\n- Answers HR policy questions\n- Retrieves relevant policy sections\n- Remembers conversation context\n- Cites sources in responses\n\n**Key Concepts:**\n- Window Buffer Memory (n8n built-in)\n- RAG pattern (retrieve then generate)\n- Source attribution\n- Context-aware responses",
+        "height": 360,
+        "width": 420
+      },
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        -2816,
+        1376
+      ],
+      "id": "9f01218a-c4bf-4a17-8249-60831a63bf20",
+      "name": "Sticky Note"
+    },
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "hr-policy",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [
+        -2320,
+        1584
+      ],
+      "id": "d6c63b50-a763-4bcf-8d87-5dd392b08770",
+      "webhookId": "hr-policy-demo",
+      "name": "Policy Question"
+    },
+    {
+      "parameters": {
+        "options": {}
+      },
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3,
+      "position": [
+        -2096,
+        1584
+      ],
+      "id": "73b27ef9-e0e4-445d-aba7-e62251b6017c",
+      "name": "Extract Question Data"
+    },
+    {
+      "parameters": {
+        "jsCode": "// TOOL: Policy Retrieval (simulated vector search)\n// In production, this would query a vector database or search API\n\nconst question = $input.item.json.question.toLowerCase();\n\n// Simulated policy knowledge base\nconst policyDatabase = [\n  {\n    id: \"PTO-001\",\n    title: \"Paid Time Off Policy\",\n    section: \"Accrual and Usage\",\n    content: \"Full-time employees accrue 15 days of PTO per year (1.25 days per month). PTO can be used for vacation, personal time, or sick leave. Requests must be submitted at least 2 weeks in advance for non-emergency situations. Unused PTO rolls over up to 5 days per year.\",\n    keywords: [\"pto\", \"vacation\", \"time off\", \"sick leave\", \"accrual\", \"days\", \"roll\", \"rollover\"]\n  },\n  {\n    id: \"PTO-002\",\n    title: \"Paid Time Off Policy\",\n    section: \"Holidays\",\n    content: \"The company observes 10 paid holidays per year: New Year's Day, MLK Day, Memorial Day, Independence Day, Labor Day, Thanksgiving (2 days), Christmas Eve, Christmas Day, and one floating holiday. Holidays are in addition to regular PTO.\",\n    keywords: [\"holiday\", \"holidays\", \"christmas\", \"thanksgiving\", \"observes\"]\n  },\n  {\n    id: \"WFH-001\",\n    title: \"Remote Work Policy\",\n    section: \"Eligibility\",\n    content: \"Employees may work remotely up to 3 days per week after completing 90 days of employment. Remote work requires manager approval and a suitable home office setup. Employees must be available during core hours (10 AM - 3 PM local time) and maintain productivity standards.\",\n    keywords: [\"remote\", \"work from home\", \"wfh\", \"hybrid\", \"home office\", \"days per week\"]\n  },\n  {\n    id: \"BENE-001\",\n    title: \"Health Benefits\",\n    section: \"Medical Coverage\",\n    content: \"Full-time employees are eligible for health insurance on the first day of the month following 30 days of employment. The company covers 80% of employee premiums and 60% of dependent premiums. Plans include medical, dental, and vision coverage.\",\n    keywords: [\"health\", \"insurance\", \"medical\", \"dental\", \"vision\", \"benefits\", \"coverage\"]\n  },\n  {\n    id: \"PAREN-001\",\n    title: \"Parental Leave Policy\",\n    section: \"Leave Duration\",\n    content: \"Primary caregivers receive 16 weeks of paid parental leave. Secondary caregivers receive 8 weeks. Leave must be taken within the first year after birth or adoption. Employees must have been employed for at least 12 months to qualify.\",\n    keywords: [\"parental\", \"maternity\", \"paternity\", \"baby\", \"adoption\", \"leave\", \"weeks\"]\n  }\n];\n\n// Simple keyword matching (in production, use semantic search)\nconst relevantDocs = policyDatabase.filter(doc => {\n  return doc.keywords.some(keyword => question.includes(keyword));\n});\n\n// If no matches, return general info\nif (relevantDocs.length === 0) {\n  relevantDocs.push({\n    id: \"GENERAL\",\n    title: \"General Information\",\n    section: \"N/A\",\n    content: \"I couldn't find specific policy information for that question. Please contact HR at hr@company.com or check the employee handbook at https://handbook.company.com\",\n    keywords: []\n  });\n}\n\n// Return top 2 most relevant (in production, rank by semantic similarity)\nconst topResults = relevantDocs.slice(0, 2);\n\nreturn {\n  json: {\n    question: $input.item.json.question,\n    user_id: $input.item.json.user_id,\n    retrieved_docs: topResults,\n    search_query: question,\n    num_results: topResults.length\n  }\n};"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -1872,
+        1584
+      ],
+      "id": "a18acbb3-20bd-4da2-9ca8-a5946ee3c9b7",
+      "name": "TOOL: Retrieve Policy Documents"
+    },
+    {
+      "parameters": {
+        "content": "## RAG Pattern: RETRIEVE\n\nRetrieval-Augmented Generation:\n\n1. **RETRIEVE**: Search knowledge base\n   - Convert question to query\n   - Find relevant documents\n   - Rank by relevance\n\n2. **GENERATE**: Use retrieved context\n   (next step)\n\nIn production:\n- Use vector embeddings\n- Semantic search\n- Re-ranking models\n- Chunk management",
+        "height": 492,
+        "width": 300
+      },
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        -1888,
+        1056
+      ],
+      "id": "fa5eae93-b3ee-473f-b940-491a39e6c8fb",
+      "name": "Sticky Note1"
+    },
+    {
+      "parameters": {
+        "content": "## Memory Node\n\nn8n's Window Buffer Memory:\n- Automatically tracks conversation\n- In this demo: Single shared memory\n- Keeps last 10 messages\n- Connects directly to agent\n\nNote: For simplicity, this demo uses\nshared memory. In production:\n- Use session-based memory\n- Store in Redis with user_id key\n- Or use PostgreSQL Memory\n- Implement per-user isolation",
+        "height": 376,
+        "width": 300
+      },
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        -1424,
+        1872
+      ],
+      "id": "9d081c2c-135a-4840-b4e5-ee70bf35a90b",
+      "name": "Sticky Note2"
+    },
+    {
+      "parameters": {
+        "promptType": "define",
+        "text": "=You are an HR policy assistant that helps employees understand company policies.\n\n**YOUR TASK:**\nAnswer the employee's question accurately using ONLY the retrieved policy documents provided below.\n\n**RETRIEVED POLICY DOCUMENTS:**\n{{ $json.retrieved_docs.map((doc, i) => `\nDocument ${i+1}:\nPolicy ID: ${doc.id}\nTitle: ${doc.title}\nSection: ${doc.section}\nContent: ${doc.content}\n`).join('\\n---\\n') }}\n\n**RULES:**\n- ONLY use information from the documents above\n- ALWAYS cite the policy ID in parentheses like (PTO-001)\n- If the answer isn't in the documents, say so and direct them to hr@company.com\n- Be helpful, professional, and conversational\n- Keep responses concise but complete\n\n**EMPLOYEE QUESTION:**\n{{ $json.question }}",
+        "options": {
+          "systemMessage": "You are a helpful HR policy assistant. Answer questions accurately based on the provided policy documents and always cite your sources using policy IDs."
+        }
+      },
+      "type": "@n8n/n8n-nodes-langchain.agent",
+      "typeVersion": 1.7,
+      "position": [
+        -1648,
+        1584
+      ],
+      "id": "e819f0a5-0179-4d7c-907a-0d3749cc0f62",
+      "name": "AGENT: Generate Answer (RAG)"
+    },
+    {
+      "parameters": {
+        "model": "llama-3.3-70b-versatile",
+        "options": {}
+      },
+      "type": "@n8n/n8n-nodes-langchain.lmChatGroq",
+      "typeVersion": 1,
+      "position": [
+        -1648,
+        1808
+      ],
+      "id": "a7db38be-f0e5-426a-a2ea-518ea34f9f10",
+      "name": "Groq LLM (Llama 3.3 70B)",
+      "credentials": {
+        "groqApi": {
+          "id": "9FfZtV8pFbhPx4mJ",
+          "name": "Groq account 2"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "content": "## RAG Pattern: GENERATE\n\nThe agent:\n1. Receives relevant policy docs\n2. Has conversation memory (automatic)\n3. Generates accurate answer\n4. Cites sources\n\nKey principles:\n- Ground in retrieved docs\n- Don't hallucinate policies\n- Cite specific policy IDs\n- Memory maintains context\n- Escalate when uncertain\n\n**Using Groq (Llama 3.3 70B)**",
+        "height": 492,
+        "width": 300
+      },
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        -1552,
+        1056
+      ],
+      "id": "abe84221-2bc6-4b53-b308-eaad6d4f90ee",
+      "name": "Sticky Note3"
+    },
+    {
+      "parameters": {
+        "jsCode": "// Format the response\nconst answer = $input.item.json.output || $input.item.json.text || \"No response generated\";\nconst retrievedDocs = $('TOOL: Retrieve Policy Documents').item.json.retrieved_docs;\nconst question = $('TOOL: Retrieve Policy Documents').item.json.question;\nconst userId = $('TOOL: Retrieve Policy Documents').item.json.user_id;\n\nreturn {\n  json: {\n    user_id: userId,\n    question: question,\n    answer: answer,\n    sources: retrievedDocs.map(doc => doc.id),\n    policy_documents_used: retrievedDocs.map(doc => ({\n      id: doc.id,\n      title: doc.title,\n      section: doc.section\n    }))\n  }\n};"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -1296,
+        1584
+      ],
+      "id": "6dbda535-02f2-4d49-8c01-0c2ac9231334",
+      "name": "Format Response"
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ $json }}",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [
+        -1072,
+        1584
+      ],
+      "id": "8bbe6c2b-f0ab-453b-9852-21718e6b6327",
+      "name": "Return Answer"
+    },
+    {
+      "parameters": {
+        "content": "## Testing This Agent\n\n**IMPORTANT:** This demo uses shared memory,\nso all conversations are in one context.\nFor production, use Redis/PostgreSQL memory\nwith session keys.\n\n---\n\n**Test 1 - First question:**\n```json\n{\n  \"user_id\": \"emp123\",\n  \"question\": \"How many days of PTO do I get?\"\n}\n```\nExpected: 15 days/year, cite (PTO-001)\n\n---\n\n**Test 2 - Follow-up (shows memory):**\n```json\n{\n  \"user_id\": \"emp123\",\n  \"question\": \"Can I roll it over?\"\n}\n```\nExpected: 5-day rollover, recognizes \"it\" = PTO\n\n---\n\n**Test 3 - Another follow-up:**\n```json\n{\n  \"user_id\": \"emp123\",\n  \"question\": \"What about holidays?\"\n}\n```\nExpected: 10 paid holidays, cite (PTO-002)\n\n---\n\n**Test 4 - Remote work:**\n```json\n{\n  \"user_id\": \"emp456\",\n  \"question\": \"Tell me about remote work\"\n}\n```\nExpected: 3 days/week, (WFH-001)\n\n---\n\n**Test 5 - Health insurance:**\n```json\n{\n  \"user_id\": \"emp456\",\n  \"question\": \"When am I eligible for health insurance?\"\n}\n```\nExpected: 30 days, 80/60% split, (BENE-001)\n\n---\n\nNote: Memory persists across all requests\nin this demo. In production, implement\nper-user/per-session isolation.",
+        "height": 1512,
+        "width": 644
+      },
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        -832,
+        1056
+      ],
+      "id": "1e4bc94a-f01d-4c05-bcf9-cad740aadbe9",
+      "name": "Sticky Note4"
+    },
+    {
+      "parameters": {
+        "sessionIdType": "customKey",
+        "sessionKey": "demo-session",
+        "contextWindowLength": 10
+      },
+      "type": "@n8n/n8n-nodes-langchain.memoryBufferWindow",
+      "typeVersion": 1.3,
+      "position": [
+        -1552,
+        1888
+      ],
+      "id": "eb51ab7a-3611-4ff0-931f-4c568671aae3",
+      "name": "Simple Memory"
+    }
+  ],
+  "pinData": {
+    "Policy Question": [
+      {
+        "json": {
+          "user_id": "emp456",
+          "question": "When am I eligible for health insurance?"
+        }
+      }
+    ]
+  },
+  "connections": {
+    "Policy Question": {
+      "main": [
+        [
+          {
+            "node": "Extract Question Data",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Extract Question Data": {
+      "main": [
+        [
+          {
+            "node": "TOOL: Retrieve Policy Documents",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "TOOL: Retrieve Policy Documents": {
+      "main": [
+        [
+          {
+            "node": "AGENT: Generate Answer (RAG)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "AGENT: Generate Answer (RAG)": {
+      "main": [
+        [
+          {
+            "node": "Format Response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Groq LLM (Llama 3.3 70B)": {
+      "ai_languageModel": [
+        [
+          {
+            "node": "AGENT: Generate Answer (RAG)",
+            "type": "ai_languageModel",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Format Response": {
+      "main": [
+        [
+          {
+            "node": "Return Answer",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Simple Memory": {
+      "ai_memory": [
+        [
+          {
+            "node": "AGENT: Generate Answer (RAG)",
+            "type": "ai_memory",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "versionId": "afcfd1fb-052d-4072-9011-11a704440322",
+  "meta": {
+    "templateCredsSetupCompleted": true,
+    "instanceId": "41d1e72e4425af7bb5431f5a3935e005f1f2bc790948207b9a931061d160b4be"
+  },
+  "id": "w3Nx2vFPf6CwolVz",
+  "tags": []
+}

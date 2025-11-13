@@ -1,0 +1,342 @@
+{
+  "name": "Lecture 1 Demo: Email Triage Agent (Fixed)",
+  "nodes": [
+    {
+      "parameters": {
+        "content": "## Email Triage Agent\n\n**Purpose:** Demonstrates the basic PERCEIVE → PLAN → ACT loop\n\n**What it does:**\n- Receives an email\n- Classifies urgency and category\n- Routes to appropriate support level\n- Drafts initial response\n\n**Key Concepts:**\n- Single agent loop\n- Tool usage (classification, routing)\n- System instructions as guardrails",
+        "height": 356,
+        "width": 420
+      },
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        -2208,
+        352
+      ],
+      "id": "d9e030d0-c002-43af-98ae-90cefb2030cd",
+      "name": "Sticky Note"
+    },
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "email-triage",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 1,
+      "position": [
+        -1872,
+        880
+      ],
+      "id": "1cd8172f-5b68-454b-b9dd-8f15c97f2b45",
+      "webhookId": "email-triage-demo",
+      "name": "Incoming Email (Trigger)"
+    },
+    {
+      "parameters": {
+        "options": {}
+      },
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3,
+      "position": [
+        -1648,
+        880
+      ],
+      "id": "2c290fdf-7a2d-4650-a501-11c189902a9a",
+      "name": "PERCEIVE: Extract Email Data"
+    },
+    {
+      "parameters": {
+        "content": "## PERCEIVE Phase\n\nThe agent receives input and prepares context.\n\nIn this example:\n- Extract email subject, body, sender\n- This is the 'perceive' step of the loop",
+        "height": 212,
+        "width": 300
+      },
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        -1696,
+        432
+      ],
+      "id": "b4ce7753-39f3-4f44-ba65-f61c062ec5f5",
+      "name": "Sticky Note1"
+    },
+    {
+      "parameters": {
+        "promptType": "define",
+        "text": "=You are an email triage agent for a technical support system.\n\nROLE: Email Classification and Routing Agent\n\nGOAL: Analyze incoming support emails and classify them by urgency, category, and appropriate support level.\n\nCAPABILITIES:\n- Classify urgency: CRITICAL, HIGH, MEDIUM, LOW\n- Categorize issues: hardware, software, network, account, other\n- Route to support levels: L1 (basic), L2 (technical), L3 (expert)\n\nCONSTRAINTS:\n- You must respond with valid JSON only\n- All fields are required\n- Provide brief reasoning for your classification\n\nPROCESS:\n1. Read the email carefully\n2. Assess urgency based on:\n   - Time sensitivity\n   - Business impact\n   - User stress level\n3. Categorize the technical issue\n4. Determine appropriate support level\n5. Provide reasoning\n\nEmail to analyze:\n\nFrom: {{ $json.sender }}\nSubject: {{ $json.email_subject }}\nBody: {{ $json.email_body }}\n\nRespond with JSON in this exact format:\n{\n  \"urgency\": \"CRITICAL|HIGH|MEDIUM|LOW\",\n  \"category\": \"hardware|software|network|account|other\",\n  \"support_level\": \"L1|L2|L3\",\n  \"reasoning\": \"Brief explanation of your classification\"\n}",
+        "options": {
+          "systemMessage": "You are a precise classification agent. Always respond with valid JSON only, no additional text."
+        }
+      },
+      "type": "@n8n/n8n-nodes-langchain.agent",
+      "typeVersion": 1.7,
+      "position": [
+        -1424,
+        880
+      ],
+      "id": "6b265a79-b620-4a62-a4b5-a22be53bfb9d",
+      "name": "PLAN: Classify & Route"
+    },
+    {
+      "parameters": {
+        "content": "## PLAN Phase\n\nThe agent uses its system instruction to:\n1. Understand the goal\n2. Analyze the input\n3. Decide on actions\n\nNote the system instruction structure:\n- ROLE: What the agent is\n- GOAL: What it's trying to achieve\n- CAPABILITIES: What it can do\n- CONSTRAINTS: What it must/must not do\n- PROCESS: How to approach the task",
+        "height": 328,
+        "width": 350
+      },
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        -1296,
+        432
+      ],
+      "id": "91c79963-ac60-42ab-a984-57fc66147d03",
+      "name": "Sticky Note2"
+    },
+    {
+      "parameters": {
+        "jsCode": "// Parse the LLM response to extract classification\nconst item = $input.item.json;\nlet response = item.output || item.text || item.response || JSON.stringify(item);\nlet classification;\n\ntry {\n  // Try to parse as JSON\n  // Remove markdown code blocks if present\n  response = response.replace(/```json\\n?/g, '').replace(/```\\n?/g, '').trim();\n  classification = JSON.parse(response);\n} catch (e) {\n  // Fallback if LLM didn't return pure JSON\n  classification = {\n    urgency: \"MEDIUM\",\n    category: \"other\",\n    support_level: \"L1\",\n    reasoning: \"Parse error - default classification applied: \" + e.message\n  };\n}\n\nreturn {\n  json: {\n    email_subject: $('PERCEIVE: Extract Email Data').item.json.email_subject,\n    email_body: $('PERCEIVE: Extract Email Data').item.json.email_body,\n    sender: $('PERCEIVE: Extract Email Data').item.json.sender,\n    classification: classification\n  }\n};"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -1136,
+        880
+      ],
+      "id": "ef03d9e3-213f-498b-b738-a42d972bfe8e",
+      "name": "Parse Classification"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict"
+          },
+          "conditions": [
+            {
+              "id": "condition-l1",
+              "leftValue": "={{ $json.classification.support_level }}",
+              "rightValue": "L1",
+              "operator": {
+                "type": "string",
+                "operation": "equals"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [
+        -976,
+        880
+      ],
+      "id": "37fcccde-159e-45a1-bb31-09f23c473fc8",
+      "name": "ACT: Route Based on Level"
+    },
+    {
+      "parameters": {
+        "content": "## ACT Phase\n\nThe agent executes actions based on its plan.\n\nHere we:\n1. Route the ticket to the appropriate queue\n2. Generate a response template\n\nIn a real system, this might:\n- Call ticketing system APIs\n- Send notifications\n- Update databases",
+        "height": 336,
+        "width": 320
+      },
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        -864,
+        432
+      ],
+      "id": "2571f3cb-f6b1-4cd2-90b1-2a1c98ff5994",
+      "name": "Sticky Note3"
+    },
+    {
+      "parameters": {
+        "options": {}
+      },
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3,
+      "position": [
+        -752,
+        784
+      ],
+      "id": "3950b771-d9ba-4612-816e-72793e256198",
+      "name": "L1: Basic Support Response"
+    },
+    {
+      "parameters": {
+        "options": {}
+      },
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3,
+      "position": [
+        -752,
+        976
+      ],
+      "id": "eb692f30-a89f-4bda-944c-4092efe851b0",
+      "name": "L2/L3: Escalated Response"
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ {\n  \"status\": \"success\",\n  \"ticket_id\": \"TKT-\" + $now.toFormat('yyyyMMdd-HHmmss'),\n  \"classification\": $json.classification,\n  \"routing\": $json.routing,\n  \"auto_response\": $json.response\n} }}",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1,
+      "position": [
+        -528,
+        880
+      ],
+      "id": "6a3e50e2-5da9-46e7-af99-3a64b2b25701",
+      "name": "Send Response"
+    },
+    {
+      "parameters": {
+        "content": "## Testing This Agent\n\nSend a POST request to the webhook URL with:\n\n```json\n{\n\"sender\": \"user@company.com\",\n\"email_subject\": \"Laptop won't turn on\",\n\"email_body\": \"My laptop won't start. I have an important presentation in 2 hours. URGENT! The CPU is burnt!!!\"\n}\n```\n\nExpected result:\n- Urgency: HIGH or CRITICAL\n- Category: hardware\n- Support Level: L2 or L3\n\nTry different scenarios:\n- Password reset (should be L1)\n- Network down (should be L2)\n- Software crash (depends on severity)",
+        "height": 508,
+        "width": 380
+      },
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        -304,
+        224
+      ],
+      "id": "c9afc27c-b9ab-4b20-837a-97981c08898f",
+      "name": "Sticky Note4"
+    },
+    {
+      "parameters": {
+        "model": "llama-3.3-70b-versatile",
+        "options": {}
+      },
+      "type": "@n8n/n8n-nodes-langchain.lmChatGroq",
+      "typeVersion": 1,
+      "position": [
+        -1424,
+        1088
+      ],
+      "id": "139116a2-b6af-4906-8e35-f504d4ffafdd",
+      "name": "Groq Chat Model",
+      "credentials": {
+        "groqApi": {
+          "id": "9FfZtV8pFbhPx4mJ",
+          "name": "Groq account 2"
+        }
+      }
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "Incoming Email (Trigger)": {
+      "main": [
+        [
+          {
+            "node": "PERCEIVE: Extract Email Data",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "PERCEIVE: Extract Email Data": {
+      "main": [
+        [
+          {
+            "node": "PLAN: Classify & Route",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "PLAN: Classify & Route": {
+      "main": [
+        [
+          {
+            "node": "Parse Classification",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Parse Classification": {
+      "main": [
+        [
+          {
+            "node": "ACT: Route Based on Level",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "ACT: Route Based on Level": {
+      "main": [
+        [
+          {
+            "node": "L1: Basic Support Response",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "L2/L3: Escalated Response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "L1: Basic Support Response": {
+      "main": [
+        [
+          {
+            "node": "Send Response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "L2/L3: Escalated Response": {
+      "main": [
+        [
+          {
+            "node": "Send Response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Groq Chat Model": {
+      "ai_languageModel": [
+        [
+          {
+            "node": "PLAN: Classify & Route",
+            "type": "ai_languageModel",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "versionId": "f9541e9b-17f8-43e4-ac70-230b3b902bb7",
+  "meta": {
+    "templateCredsSetupCompleted": true,
+    "instanceId": "41d1e72e4425af7bb5431f5a3935e005f1f2bc790948207b9a931061d160b4be"
+  },
+  "id": "9YmuKTWdbyA7FqGb",
+  "tags": []
+}

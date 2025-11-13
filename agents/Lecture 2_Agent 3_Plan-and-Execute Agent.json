@@ -1,0 +1,152 @@
+{
+  "name": "Plan-and-Execute Agent (Simple Weather)",
+  "nodes": [
+    {
+      "parameters": {
+        "options": {}
+      },
+      "id": "76211dc9-7ed9-4bf0-859e-e742834c54ca",
+      "name": "Plan and Execute Agent",
+      "type": "@n8n/n8n-nodes-langchain.agent",
+      "typeVersion": 3,
+      "position": [
+        656,
+        -80
+      ]
+    },
+    {
+      "parameters": {
+        "model": {
+          "__rl": true,
+          "value": "gpt-4o-mini",
+          "mode": "list",
+          "cachedResultName": "gpt-4o-mini"
+        },
+        "options": {}
+      },
+      "id": "fd89308d-0e0f-44be-9b17-8644c4178466",
+      "name": "OpenAI Chat Model",
+      "type": "@n8n/n8n-nodes-langchain.lmChatOpenAi",
+      "typeVersion": 1.2,
+      "position": [
+        592,
+        144
+      ],
+      "credentials": {
+        "openAiApi": {
+          "id": "k4hQJPTzNMv31gPt",
+          "name": "OpenAi account"
+        }
+      }
+    },
+    {
+      "parameters": {},
+      "id": "11a2fcb0-40ea-40cc-a9d0-4aa79be58887",
+      "name": "Calculator",
+      "type": "@n8n/n8n-nodes-langchain.toolCalculator",
+      "typeVersion": 1,
+      "position": [
+        720,
+        144
+      ]
+    },
+    {
+      "parameters": {
+        "description": "Get current weather for any city worldwide. Input should be a city name like 'Paris' or 'Tokyo'. Returns temperature and weather conditions.",
+        "jsCode": "const city = $input.item.json.city || $input.item.json.query || 'London';\n\ntry {\n  const url = `https://wttr.in/${encodeURIComponent(city)}?format=3`;\n  const response = await this.helpers.httpRequest({ method: 'GET', url: url });\n  return `${response}`;\n} catch (error) {\n  return `Could not get weather for ${city}`;\n}"
+      },
+      "id": "f81014de-3498-4956-a5f7-48c57eb0a048",
+      "name": "Weather",
+      "type": "@n8n/n8n-nodes-langchain.toolCode",
+      "typeVersion": 1.3,
+      "position": [
+        848,
+        144
+      ]
+    },
+    {
+      "parameters": {
+        "options": {}
+      },
+      "type": "@n8n/n8n-nodes-langchain.chatTrigger",
+      "typeVersion": 1.3,
+      "position": [
+        288,
+        -80
+      ],
+      "id": "d1a498a5-6700-43d6-960c-78f22a2f89a9",
+      "name": "When chat message received",
+      "webhookId": "cb9d8083-0398-4b9e-8651-f2126110ec63"
+    },
+    {
+      "parameters": {
+        "content": "## How to test \nwhat is 4*4 and what is the weather in London?\n"
+      },
+      "type": "n8n-nodes-base.stickyNote",
+      "position": [
+        -32,
+        -48
+      ],
+      "typeVersion": 1,
+      "id": "b919dc2a-48d0-43be-8160-f64653b47669",
+      "name": "Sticky Note"
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "OpenAI Chat Model": {
+      "ai_languageModel": [
+        [
+          {
+            "node": "Plan and Execute Agent",
+            "type": "ai_languageModel",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Calculator": {
+      "ai_tool": [
+        [
+          {
+            "node": "Plan and Execute Agent",
+            "type": "ai_tool",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Weather": {
+      "ai_tool": [
+        [
+          {
+            "node": "Plan and Execute Agent",
+            "type": "ai_tool",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "When chat message received": {
+      "main": [
+        [
+          {
+            "node": "Plan and Execute Agent",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "versionId": "ccbd4b9e-05c8-4e4b-9b3c-ec51200ca854",
+  "meta": {
+    "instanceId": "41d1e72e4425af7bb5431f5a3935e005f1f2bc790948207b9a931061d160b4be"
+  },
+  "id": "sltwd9s7egk4yrAJ",
+  "tags": []
+}

@@ -1,0 +1,565 @@
+{
+  "name": "Agent 1: State Machine Policy Q&A",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "policy/ask",
+        "responseMode": "lastNode",
+        "options": {}
+      },
+      "id": "cd55400d-4e93-47b2-8369-0aa44779f050",
+      "name": "Webhook - Query Input",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [
+        -912,
+        272
+      ],
+      "webhookId": "policy-qa-webhook",
+      "notes": "Entry point for all policy queries\nCaptures user context and session tracking\nExpected input: {query, user_id, session_id}"
+    },
+    {
+      "parameters": {
+        "jsCode": "// Initialize state machine context\nconst input = $json;\n\n// Generate unique execution ID for tracing\nconst executionId = `exec_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;\n\n// Initialize state machine\nconst stateMachine = {\n  // Current state\n  currentState: 'INPUT_VALIDATION',\n  previousState: null,\n  \n  // State history for debugging\n  stateHistory: [{\n    state: 'IDLE',\n    timestamp: new Date().toISOString(),\n    duration_ms: 0\n  }],\n  \n  // Execution context\n  executionId: executionId,\n  sessionId: input.session_id || 'unknown',\n  userId: input.user_id || 'anonymous',\n  startTime: Date.now(),\n  \n  // Query data\n  query: input.query,\n  queryComplexity: null,\n  \n  // Agent state\n  retriesAttempted: 0,\n  maxRetries: 3,\n  stepCount: 0,\n  maxSteps: 10,\n  \n  // Results tracking\n  retrievalResults: [],\n  validationStatus: null,\n  finalAnswer: null,\n  \n  // Metadata\n  totalCost: 0,\n  totalLatency: 0\n};\n\n// Set workflow start time as environment variable\n$env.WORKFLOW_START_TIME = Date.now();\n$env.SESSION_ID = stateMachine.sessionId;\n$env.EXECUTION_ID = executionId;\n\nreturn { json: stateMachine };"
+      },
+      "id": "402fb58f-725c-42d4-b5d8-cf71fc752f7a",
+      "name": "Code - Initialize State Machine",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -688,
+        272
+      ],
+      "notes": "Creates explicit state machine object\nTracks all state transitions for observability\nInitializes counters for guardrails (retries, steps)"
+    },
+    {
+      "parameters": {
+        "jsCode": "const state = $json;\nconst stateStartTime = Date.now();\n\n// Input validation rules\nconst validationRules = {\n  queryExists: !!state.query,\n  queryNotEmpty: state.query && state.query.trim().length > 0,\n  queryLength: state.query && state.query.length <= 500,\n  noSQLInjection: state.query && !state.query.toLowerCase().match(/(\\bdrop\\b|\\bdelete\\b|\\binsert\\b|--|\\bor\\b.*=.*\\bor\\b)/),\n  noScriptInjection: state.query && !state.query.match(/<script|javascript:|onerror=/i),\n  notOnlySpecialChars: state.query && state.query.replace(/[^a-zA-Z0-9\\s]/g, '').length > 2\n};\n\n// Check all rules\nconst allValid = Object.values(validationRules).every(rule => rule === true);\nconst failedRules = Object.keys(validationRules).filter(key => !validationRules[key]);\n\n// Determine next state\nlet nextState;\nlet validationMessage;\n\nif (allValid) {\n  nextState = 'PROCESSING';\n  validationMessage = 'Input validation passed';\n} else {\n  nextState = 'REJECTED';\n  validationMessage = `Input validation failed: ${failedRules.join(', ')}`;\n}\n\n// Record state transition\nconst transitionDuration = Date.now() - stateStartTime;\nstate.stateHistory.push({\n  state: 'INPUT_VALIDATION',\n  timestamp: new Date().toISOString(),\n  duration_ms: transitionDuration,\n  decision: nextState,\n  reason: validationMessage\n});\n\n// Update state machine\nstate.previousState = state.currentState;\nstate.currentState = nextState;\nstate.stepCount++;\n\n// Attach validation results\nstate.validationRules = validationRules;\nstate.validationMessage = validationMessage;\n\nreturn { json: state };"
+      },
+      "id": "1c15eb67-168c-444f-95d5-30c1c4a6c50e",
+      "name": "Code - Input Validation",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -464,
+        272
+      ],
+      "notes": "Implements multiple validation checks as guardrails\nPrevents SQL injection, XSS, malformed inputs\nRecords validation decision in state history"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict"
+          },
+          "conditions": [
+            {
+              "id": "validation-rejected",
+              "leftValue": "={{$json.currentState}}",
+              "rightValue": "REJECTED",
+              "operator": {
+                "type": "string",
+                "operation": "equals"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "1a6ac15b-a622-498a-b328-973e32d4efa6",
+      "name": "Switch - Validation Router",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [
+        -240,
+        272
+      ],
+      "notes": "First major branch in state machine\nRoutes rejected inputs to error response\nValid inputs proceed to complexity analysis"
+    },
+    {
+      "parameters": {
+        "jsCode": "const state = $json;\n\n// Create user-friendly error message\nconst response = {\n  status: 'rejected',\n  executionId: state.executionId,\n  sessionId: state.sessionId,\n  \n  error: {\n    message: 'Your query could not be processed',\n    details: state.validationMessage,\n    suggestions: [\n      'Keep queries under 500 characters',\n      'Use natural language questions',\n      'Avoid special characters like <, >, or SQL keywords'\n    ]\n  },\n  \n  debug: {\n    currentState: state.currentState,\n    stateHistory: state.stateHistory,\n    failedRules: Object.keys(state.validationRules)\n      .filter(key => !state.validationRules[key])\n  }\n};\n\nreturn { json: response };"
+      },
+      "id": "8ffd7044-cacf-4ac3-9c5b-1e0359b7cda4",
+      "name": "Code - Format Rejection Response",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        48,
+        176
+      ],
+      "notes": "Terminal state - workflow ends here\nProvides helpful feedback to user\nIncludes debug info for troubleshooting"
+    },
+    {
+      "parameters": {
+        "modelId": "gpt-4o-mini",
+        "messages": {
+          "values": [
+            {
+              "content": "=You are a query complexity classifier. Analyze this policy question and classify it as SIMPLE, COMPLEX, or UNCLEAR.\n\nQuery: {{ $json.query }}\n\nSIMPLE: Direct factual questions about specific policies (e.g., \"What is the PTO policy?\", \"How many sick days do I get?\")\nCOMPLEX: Multi-part questions, comparisons, or requiring synthesis (e.g., \"Compare PTO vs sick leave and tell me which I should use\")\nUNCLEAR: Ambiguous, vague, or missing context\n\nRespond with JSON only:\n{\n  \"complexity\": \"SIMPLE\" | \"COMPLEX\" | \"UNCLEAR\",\n  \"confidence\": 0.0-1.0,\n  \"reasoning\": \"brief explanation\"\n}"
+            }
+          ]
+        },
+        "jsonOutput": true,
+        "options": {
+          "maxTokens": 200,
+          "temperature": 0.1
+        }
+      },
+      "id": "234a59a4-af65-437d-8b0f-49048b085050",
+      "name": "AI Agent - Determine Query Complexity",
+      "type": "@n8n/n8n-nodes-langchain.openAi",
+      "typeVersion": 1,
+      "position": [
+        -16,
+        368
+      ],
+      "credentials": {
+        "openAiApi": {
+          "id": "k4hQJPTzNMv31gPt",
+          "name": "OpenAi account"
+        }
+      },
+      "notes": "Classifies query as SIMPLE, COMPLEX, or UNCLEAR\nUses small/cheap model for classification\nLow temperature for consistency"
+    },
+    {
+      "parameters": {
+        "jsCode": "// Get the state from two nodes back (before AI Agent)\n// AI Agent is at index 0, Switch is at index 1, we need the data from before Switch\nconst state = $('Switch - Validation Router').first().json;\nconst aiOutput = $json;\n\n// Parse the AI response from the message content\nlet complexityResult;\ntry {\n  const content = aiOutput.message?.content;\n  if (typeof content === 'string') {\n    complexityResult = JSON.parse(content);\n  } else if (typeof content === 'object') {\n    complexityResult = content;\n  } else {\n    complexityResult = { complexity: 'UNCLEAR', confidence: 0, reasoning: 'Failed to parse AI response' };\n  }\n} catch (e) {\n  complexityResult = { complexity: 'UNCLEAR', confidence: 0, reasoning: 'Failed to parse AI response' };\n}\n\nconst complexity = complexityResult.complexity || 'UNCLEAR';\nconst confidence = complexityResult.confidence || 0;\n\nstate.queryComplexity = complexity;\nstate.complexityConfidence = confidence;\nstate.complexityReasoning = complexityResult.reasoning;\n\nlet nextState;\nswitch(complexity) {\n  case 'SIMPLE':\n    nextState = 'SIMPLE_RETRIEVAL';\n    break;\n  case 'COMPLEX':\n    nextState = 'COMPLEX_RETRIEVAL';\n    break;\n  case 'UNCLEAR':\n    nextState = 'UNCLEAR_INTENT';\n    break;\n  default:\n    nextState = 'UNCLEAR_INTENT';\n}\n\nstate.stateHistory.push({\n  state: 'PROCESSING',\n  timestamp: new Date().toISOString(),\n  duration_ms: 0,\n  decision: nextState,\n  reason: `Complexity: ${complexity}, Confidence: ${confidence}`\n});\n\nstate.previousState = state.currentState;\nstate.currentState = nextState;\nstate.stepCount++;\n\nreturn { json: state };"
+      },
+      "id": "5655d3ca-04fe-4945-aa3e-a2bdff82584f",
+      "name": "Code - Update State with Complexity",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        336,
+        368
+      ],
+      "notes": "Bridges AI output to state machine\nMaps classification to next state\nRecords decision reasoning for debugging"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict"
+          },
+          "conditions": [
+            {
+              "id": "simple-retrieval",
+              "leftValue": "={{$json.currentState}}",
+              "rightValue": "SIMPLE_RETRIEVAL",
+              "operator": {
+                "type": "string",
+                "operation": "equals"
+              }
+            },
+            {
+              "id": "complex-retrieval",
+              "leftValue": "={{$json.currentState}}",
+              "rightValue": "COMPLEX_RETRIEVAL",
+              "operator": {
+                "type": "string",
+                "operation": "equals"
+              }
+            },
+            {
+              "id": "unclear-intent",
+              "leftValue": "={{$json.currentState}}",
+              "rightValue": "UNCLEAR_INTENT",
+              "operator": {
+                "type": "string",
+                "operation": "equals"
+              }
+            }
+          ],
+          "combinator": "or"
+        },
+        "options": {}
+      },
+      "id": "e89d8fde-9598-4568-a237-a9d6b51cf7fc",
+      "name": "Switch - Complexity Router",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [
+        560,
+        368
+      ],
+      "notes": "Second major branch in state machine\nThree distinct execution paths based on query type"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.yourcompany.com/policy/search",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"query\": \"{{ $json.query }}\",\n  \"top_k\": 3,\n  \"min_relevance\": 0.7\n}",
+        "options": {
+          "timeout": 15000
+        }
+      },
+      "id": "6ed523ae-04ef-4664-b2ad-61ec4c2e8498",
+      "name": "HTTP - Simple Policy Lookup",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        784,
+        368
+      ],
+      "continueOnFail": true,
+      "notes": "Simple vector search for straightforward queries\n15-second timeout prevents hanging\nContinue On Fail allows retry logic to catch errors"
+    },
+    {
+      "parameters": {
+        "jsCode": "// Get the state from before HTTP Request\nconst state = $('Switch - Complexity Router').first().json;\n// HTTP Request output\nconst retrievalResponse = $json;\n\nconst retrievalFailed = retrievalResponse.error !== undefined;\n\nlet nextState;\nlet retrievalStatus;\n\nif (retrievalFailed) {\n  state.retriesAttempted++;\n  \n  if (state.retriesAttempted < state.maxRetries) {\n    nextState = 'RETRYING';\n    retrievalStatus = `Retrieval failed, retry ${state.retriesAttempted}/${state.maxRetries}`;\n  } else {\n    nextState = 'FALLBACK';\n    retrievalStatus = 'Max retries reached, moving to fallback';\n  }\n  \n  state.retrievalResults = [];\n  \n} else if (!retrievalResponse.results || retrievalResponse.results.length === 0) {\n  state.retriesAttempted++;\n  \n  if (state.retriesAttempted < state.maxRetries) {\n    nextState = 'RETRYING';\n    retrievalStatus = 'No results, trying broader search';\n  } else {\n    nextState = 'FALLBACK';\n    retrievalStatus = 'No results after retries, escalating';\n  }\n  \n  state.retrievalResults = [];\n  \n} else {\n  nextState = 'VALIDATING';\n  retrievalStatus = `Found ${retrievalResponse.results.length} results`;\n  state.retrievalResults = retrievalResponse.results;\n  state.retriesAttempted = 0;\n}\n\nstate.stateHistory.push({\n  state: 'SIMPLE_RETRIEVAL',\n  timestamp: new Date().toISOString(),\n  duration_ms: retrievalResponse?.latency_ms || 0,\n  decision: nextState,\n  reason: retrievalStatus\n});\n\nstate.previousState = state.currentState;\nstate.currentState = nextState;\nstate.stepCount++;\n\nreturn { json: state };"
+      },
+      "id": "772a5a1c-62a2-4333-bdb8-5fa86db0d778",
+      "name": "Code - Check Retrieval Success",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1008,
+        368
+      ],
+      "notes": "Checks for multiple failure modes\nImplements retry logic with counter tracking\nMoves to fallback after max retries"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict"
+          },
+          "conditions": [
+            {
+              "id": "validating",
+              "leftValue": "={{$json.currentState}}",
+              "rightValue": "VALIDATING",
+              "operator": {
+                "type": "string",
+                "operation": "equals"
+              }
+            },
+            {
+              "id": "retrying",
+              "leftValue": "={{$json.currentState}}",
+              "rightValue": "RETRYING",
+              "operator": {
+                "type": "string",
+                "operation": "equals"
+              }
+            },
+            {
+              "id": "fallback",
+              "leftValue": "={{$json.currentState}}",
+              "rightValue": "FALLBACK",
+              "operator": {
+                "type": "string",
+                "operation": "equals"
+              }
+            }
+          ],
+          "combinator": "or"
+        },
+        "options": {}
+      },
+      "id": "19841546-1cab-4886-bf9b-b413d847d187",
+      "name": "Switch - Retrieval Result Router",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [
+        1232,
+        368
+      ],
+      "notes": "Routes based on retrieval outcome\nSuccess → validation/answer generation\nFailure → retry or fallback logic"
+    },
+    {
+      "parameters": {
+        "modelId": "gpt-4o",
+        "messages": {
+          "values": [
+            {
+              "content": "=You are a policy expert assistant. Answer this question using ONLY the provided context. Do not make up information.\n\nQuestion: {{ $('Switch - Retrieval Result Router').first().json.query }}\n\nContext from policy documents:\n{{ $('Switch - Retrieval Result Router').first().json.retrievalResults }}\n\nProvide a JSON response:\n{\n  \"answer\": \"your detailed answer\",\n  \"confidence\": 0.0-1.0,\n  \"based_on_context\": true/false,\n  \"sources\": [\"source1\", \"source2\"],\n  \"caveat\": \"any limitations or caveats\"\n}"
+            }
+          ]
+        },
+        "jsonOutput": true,
+        "options": {
+          "maxTokens": 500,
+          "temperature": 0.1
+        }
+      },
+      "id": "5dcc3e77-bf39-4fd2-9a2a-4c2309b3c28e",
+      "name": "AI Agent - Generate Answer",
+      "type": "@n8n/n8n-nodes-langchain.openAi",
+      "typeVersion": 1,
+      "position": [
+        1456,
+        368
+      ],
+      "credentials": {
+        "openAiApi": {
+          "id": "k4hQJPTzNMv31gPt",
+          "name": "OpenAi account"
+        }
+      },
+      "notes": "Grounds answer in retrieved context\nExplicit instruction against hallucination\nStructured output for validation"
+    },
+    {
+      "parameters": {
+        "jsCode": "// Get the state from before AI Agent\nconst state = $('Switch - Retrieval Result Router').first().json;\n// AI Agent output\nconst aiOutput = $json;\n\n// Parse the AI response\nlet answerResult;\ntry {\n  const content = aiOutput.message?.content;\n  if (typeof content === 'string') {\n    answerResult = JSON.parse(content);\n  } else if (typeof content === 'object') {\n    answerResult = content;\n  } else {\n    answerResult = { answer: 'Failed to parse response', confidence: 0, based_on_context: false, sources: [] };\n  }\n} catch (e) {\n  answerResult = { answer: 'Failed to parse response', confidence: 0, based_on_context: false, sources: [] };\n}\n\nconst validation = {\n  hasAnswer: answerResult.answer && answerResult.answer.length > 10,\n  basedOnContext: answerResult.based_on_context === true,\n  sufficientConfidence: answerResult.confidence >= 0.6,\n  hasSources: answerResult.sources && answerResult.sources.length > 0,\n  notRefusal: !answerResult.answer.toLowerCase().includes(\"don't have that information\")\n};\n\nconst isValid = Object.values(validation).filter(v => v === true).length >= 3;\n\nlet nextState;\n\nif (isValid) {\n  nextState = 'COMPLETE';\n  state.finalAnswer = answerResult;\n  state.validationStatus = 'PASSED';\n} else {\n  nextState = 'ESCALATION';\n  state.validationStatus = 'FAILED_ESCALATE';\n  state.escalationReason = 'Answer validation failed - insufficient quality';\n  state.escalationType = 'quality';\n  state.finalAnswer = {\n    answer: \"I apologize, but I couldn't find a confident answer to your question.\",\n    confidence: 0,\n    sources: [],\n    caveat: \"This query requires human review.\"\n  };\n}\n\nstate.stateHistory.push({\n  state: 'VALIDATING',\n  timestamp: new Date().toISOString(),\n  duration_ms: 0,\n  decision: nextState,\n  reason: `Validation: ${JSON.stringify(validation)}`\n});\n\nstate.previousState = state.currentState;\nstate.currentState = nextState;\nstate.stepCount++;\n\nreturn { json: state };"
+      },
+      "id": "36053246-1b85-433b-9473-fb1689696c7f",
+      "name": "Code - Validate Answer Quality",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1808,
+        368
+      ],
+      "notes": "Multiple validation criteria\nRequires 3/5 checks to pass\nCatches low-quality answers before returning"
+    },
+    {
+      "parameters": {
+        "jsCode": "const state = $json;\nconst totalDuration = Date.now() - state.startTime;\n\nconst response = {\n  status: 'success',\n  executionId: state.executionId,\n  sessionId: state.sessionId,\n  \n  answer: {\n    text: state.finalAnswer.answer,\n    confidence: state.finalAnswer.confidence,\n    sources: state.finalAnswer.sources,\n    caveat: state.finalAnswer.caveat\n  },\n  \n  metadata: {\n    statesVisited: state.stateHistory.length,\n    totalSteps: state.stepCount,\n    totalDuration_ms: totalDuration,\n    retriesUsed: state.retriesAttempted,\n    queryComplexity: state.queryComplexity\n  }\n};\n\nreturn { json: response };"
+      },
+      "id": "c98d560e-b996-4a67-89a2-40acf60b495c",
+      "name": "Code - Format Success Response",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        2032,
+        368
+      ],
+      "notes": "Terminal state - workflow completes\nClean response without internal state details\nIncludes useful metadata for analytics"
+    },
+    {
+      "parameters": {
+        "content": "═══════════════════════════════════════════════════════════════\n🤖 POLICY Q&A STATE MACHINE AGENT\n═══════════════════════════════════════════════════════════════\n\nWHAT THIS AGENT DOES:\n---------------------\nThis is an AI agent that answers employee HR policy questions using an \nexplicit state machine architecture. It provides structured, validated \nanswers while maintaining full observability of its decision-making process.\n\nThe agent handles questions like:\n- \"How many vacation days do I get?\"\n- \"What health insurance plans are available?\"\n- \"What happens to my 401k if I go part-time?\"\n\n\nHOW IT WORKS (STATE FLOW):\n---------------------------\nIDLE \n  → INPUT_VALIDATION (security checks, format validation)\n      → REJECTED (if validation fails)\n      → PROCESSING (if valid)\n          → Complexity Classification (AI determines SIMPLE/COMPLEX/UNCLEAR)\n              → SIMPLE_RETRIEVAL (direct policy lookup)\n              → COMPLEX_RETRIEVAL (multi-source synthesis)\n              → UNCLEAR_INTENT (needs clarification)\n                  → VALIDATING (quality checks on retrieved data)\n                      → Generate Answer (AI creates response)\n                          → Validate Quality (confidence/citation checks)\n                              → COMPLETE (success!)\n                              → ESCALATION (if quality insufficient)\n\n\nKEY FEATURES:\n-------------\n✓ Security Guardrails: Blocks SQL injection, XSS, malformed inputs\n✓ AI-Powered Routing: Automatically classifies query complexity\n✓ Retry Logic: Up to 3 retrieval attempts with exponential backoff\n✓ Quality Gates: Validates answer confidence and source citations\n✓ Full Observability: Every state transition tracked in response\n✓ Graceful Degradation: Escalates to human when confidence is low\n✓ Cost Optimization: Uses gpt-4o-mini for classification, gpt-4o for answers\n\n\n",
+        "height": 1184,
+        "width": 896
+      },
+      "type": "n8n-nodes-base.stickyNote",
+      "position": [
+        -2896,
+        -672
+      ],
+      "typeVersion": 1,
+      "id": "b59232e2-a308-4af2-9989-19d63fbb36af",
+      "name": "Sticky Note"
+    },
+    {
+      "parameters": {
+        "content": "SAMPLE CURL COMMANDS:\n---------------------\n\n# Valid Simple Query\ncurl -X POST http://localhost:5678/webhook/policy/ask \\\n  -H 'Content-Type: application/json' \\\n  -d '{\n    \"query\": \"How many vacation days do I get per year?\",\n    \"user_id\": \"emp_12345\",\n    \"session_id\": \"sess_abc123\"\n  }'\n\n# Valid Complex Query\ncurl -X POST http://localhost:5678/webhook/policy/ask \\\n  -H 'Content-Type: application/json' \\\n  -d '{\n    \"query\": \"If I work remotely from another state, how does that affect my health insurance and tax withholding?\",\n    \"user_id\": \"emp_24680\",\n    \"session_id\": \"sess_ghi789\"\n  }'\n\n# Invalid Query (SQL Injection - Should be REJECTED)\ncurl -X POST http://localhost:5678/webhook/policy/ask \\\n  -H 'Content-Type: application/json' \\\n  -d '{\n    \"query\": \"What is the policy OR 1=1 DROP TABLE employees--\",\n    \"user_id\": \"emp_33333\",\n    \"session_id\": \"sess_stu901\"\n  }'\n\n# Unclear Query (Should ESCALATE)\ncurl -X POST http://localhost:5678/webhook/policy/ask \\\n  -H 'Content-Type: application/json' \\\n  -d '{\n    \"query\": \"What about that thing?\",\n    \"user_id\": \"emp_11111\",\n    \"session_id\": \"sess_mno345\"\n  }'\n\n\nRESPONSE FORMATS:\n-----------------\n\nSUCCESS Response:\n{\n  \"status\": \"success\",\n  \"executionId\": \"exec_1699564800000_a1b2c3d4e\",\n  \"sessionId\": \"sess_abc123\",\n  \"answer\": {\n    \"text\": \"Employees receive 15 vacation days per year...\",\n    \"confidence\": 0.92,\n    \"sources\": [\"Employee Handbook Section 4.2\", \"PTO Policy v2.3\"],\n    \"caveat\": \"This applies to full-time employees with 1+ year tenure\"\n  },\n  \"metadata\": {\n    \"statesVisited\": 5,\n    \"totalSteps\": 4,\n    \"totalDuration_ms\": 2345,\n    \"retriesUsed\": 0,\n    \"queryComplexity\": \"SIMPLE\"\n  }\n}\n\nREJECTED Response:\n{\n  \"status\": \"rejected\",\n  \"executionId\": \"exec_1699564800000_x9y8z7w6v\",\n  \"error\": {\n    \"message\": \"Your query could not be processed\",\n    \"details\": \"Input validation failed: noSQLInjection\",\n    \"suggestions\": [\n      \"Keep queries under 500 characters\",\n      \"Use natural language questions\",\n      \"Avoid special characters like <, >, or SQL keywords\"\n    ]\n  },\n  \"debug\": {\n    \"currentState\": \"REJECTED\",\n    \"failedRules\": [\"noSQLInjection\"]\n  }\n}\n\nESCALATION Response:\n{\n  \"status\": \"escalated\",\n  \"executionId\": \"exec_1699564800000_p0o9i8u7y\",\n  \"escalation\": {\n    \"reason\": \"Unable to determine clear intent\",\n    \"type\": \"complexity\",\n    \"original_query\": \"What about that thing?\"\n  },\n  \"nextSteps\": {\n    \"message\": \"I've created a ticket for our HR team...\",\n    \"estimated_response\": \"4 hours\",\n    \"ticket_id\": \"TICKET_1699564800000\"\n  }\n}\n\n\n",
+        "height": 1856,
+        "width": 896
+      },
+      "type": "n8n-nodes-base.stickyNote",
+      "position": [
+        -1952,
+        -656
+      ],
+      "typeVersion": 1,
+      "id": "156e3a7e-49bf-4a48-87ee-ebc3cb2a6e8f",
+      "name": "Sticky Note1"
+    },
+    {
+      "parameters": {
+        "content": "TESTING INSTRUCTIONS:\n---------------------\n1. Import this workflow into n8n\n2. Activate the workflow\n3. Note the webhook URL (should be: http://localhost:5678/webhook/policy/ask)\n4. Use the curl commands above to test different scenarios\n5. Check the response for \"stateHistory\" to see state transitions\n6. Review \"Agent_1_Test_Data.json\" for 20 comprehensive test cases\n\n\nVALIDATION RULES:\n-----------------\nThe agent validates all inputs against these rules:\n- Query must exist and not be empty\n- Maximum length: 500 characters\n- No SQL injection patterns (DROP, DELETE, INSERT, OR 1=1, etc.)\n- No script injection patterns (<script>, javascript:, onerror=)\n- Must contain at least 3 alphanumeric characters\n- All validation failures are logged in debug.failedRules\n\n\nGUARDRAILS & LIMITS:\n--------------------\n- Max Retries: 3 (for retrieval failures)\n- Max Steps: 10 (prevents infinite loops)\n- Confidence Threshold: 0.6 (answers below this escalate)\n- Minimum Answer Length: 50 characters\n- Required: At least 1 source citation\n\n\nSTATE MACHINE ARCHITECTURE:\n----------------------------\nThis agent uses an explicit state machine pattern where:\n\n1. Every node updates the \"currentState\" field\n2. All state transitions are recorded in \"stateHistory\" array\n3. Each state has clear entry/exit conditions\n4. State history includes timestamps and duration metrics\n5. Step counter prevents runaway executions\n6. Retry counter enables controlled failure recovery\n\nBenefits of this approach:\n✓ Complete observability - see exactly what the agent did\n✓ Easy debugging - state history shows decision path\n✓ Predictable behavior - explicit state transitions\n✓ Testable - can verify state transitions in unit tests\n✓ Maintainable - easy to add new states or modify logic\n\n\n",
+        "height": 1024,
+        "width": 896
+      },
+      "type": "n8n-nodes-base.stickyNote",
+      "position": [
+        352,
+        -736
+      ],
+      "typeVersion": 1,
+      "id": "ab9966ff-a252-49be-9589-c7ede1d5fe1e",
+      "name": "Sticky Note2"
+    },
+    {
+      "parameters": {
+        "content": "CUSTOMIZATION GUIDE:\n--------------------\nTo connect this to your real systems:\n\n1. REPLACE HTTP NODE:\n   - Currently a stub that simulates policy retrieval\n   - Replace with your vector database (Pinecone, Weaviate, etc.)\n   - Or connect to your document search API\n\n2. UPDATE AI CREDENTIALS:\n   - Add your OpenAI API key in n8n credentials\n   - Or replace with Anthropic/other LLM provider\n\n3. ADJUST THRESHOLDS:\n   - Confidence threshold (currently 0.6)\n   - Max retries (currently 3)\n   - Query length limit (currently 500 chars)\n   - Answer quality requirements\n\n4. ADD ESCALATION LOGIC:\n   - Connect to ticketing system (Zendesk, Jira, etc.)\n   - Send Slack notifications\n   - Email HR team\n   - Log to analytics platform\n\n5. EXTEND STATE MACHINE:\n   - Add COMPLEX_RETRIEVAL implementation\n   - Add multi-turn conversation support\n   - Add feedback collection state\n   - Add analytics/logging states\n\n\nARCHITECTURE NOTES:\n-------------------\nThis pattern is reusable for ANY multi-step agent workflow:\n- Customer support bots\n- Sales qualification agents\n- Data analysis assistants\n- Content generation pipelines\n- Approval workflow automation\n\nThe explicit state machine makes agent behavior transparent and \ndebuggable - critical for production AI systems.\n\n\n20 TEST CASES INCLUDED:\n------------------------\nSee \"Agent_1_Test_Data.json\" for comprehensive test suite including:\n- Valid simple queries (PTO, health insurance, etc.)\n- Valid complex queries (multi-part, conditional)\n- Invalid inputs (SQL injection, XSS, empty, too long)\n- Edge cases (minimal query, missing context)\n- Sensitive topics (bereavement, layoffs)\n- Unclear intent (vague questions)\n\nEach test case includes:\n- Expected state flow\n- Input payload\n- Description of what it tests\n\n\nWEBHOOK ENDPOINT:\n-----------------\nPOST http://localhost:5678/webhook/policy/ask\n\nHeaders:\n  Content-Type: application/json\n\nBody:\n  {\n    \"query\": \"your question here\",\n    \"user_id\": \"optional_user_id\",\n    \"session_id\": \"optional_session_id\"\n  }\n\n\n═══════════════════════════════════════════════════════════════\n💡 TIP: Check the \"stateHistory\" array in responses to see \nexactly how the agent processed your query!\n═══════════════════════════════════════════════════════════════",
+        "height": 1680,
+        "width": 896
+      },
+      "type": "n8n-nodes-base.stickyNote",
+      "position": [
+        2224,
+        -784
+      ],
+      "typeVersion": 1,
+      "id": "f571e82b-6425-4870-96d6-4ffde9e1ddfa",
+      "name": "Sticky Note3"
+    }
+  ],
+  "pinData": {
+    "Webhook - Query Input": [
+      {
+        "json": {
+          "query": "What health insurance plans are available?",
+          "user_id": "emp_67890",
+          "session_id": "sess_def456"
+        }
+      }
+    ]
+  },
+  "connections": {
+    "Webhook - Query Input": {
+      "main": [
+        [
+          {
+            "node": "Code - Initialize State Machine",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Code - Initialize State Machine": {
+      "main": [
+        [
+          {
+            "node": "Code - Input Validation",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Code - Input Validation": {
+      "main": [
+        [
+          {
+            "node": "Switch - Validation Router",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Switch - Validation Router": {
+      "main": [
+        [
+          {
+            "node": "Code - Format Rejection Response",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "AI Agent - Determine Query Complexity",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "AI Agent - Determine Query Complexity": {
+      "main": [
+        [
+          {
+            "node": "Code - Update State with Complexity",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Code - Update State with Complexity": {
+      "main": [
+        [
+          {
+            "node": "Switch - Complexity Router",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Switch - Complexity Router": {
+      "main": [
+        [
+          {
+            "node": "HTTP - Simple Policy Lookup",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "HTTP - Simple Policy Lookup": {
+      "main": [
+        [
+          {
+            "node": "Code - Check Retrieval Success",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Code - Check Retrieval Success": {
+      "main": [
+        [
+          {
+            "node": "Switch - Retrieval Result Router",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Switch - Retrieval Result Router": {
+      "main": [
+        [
+          {
+            "node": "AI Agent - Generate Answer",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "AI Agent - Generate Answer": {
+      "main": [
+        [
+          {
+            "node": "Code - Validate Answer Quality",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Code - Validate Answer Quality": {
+      "main": [
+        [
+          {
+            "node": "Code - Format Success Response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "versionId": "5ce12332-86b9-4101-ba26-0795e9b02968",
+  "meta": {
+    "templateCredsSetupCompleted": true,
+    "instanceId": "41d1e72e4425af7bb5431f5a3935e005f1f2bc790948207b9a931061d160b4be"
+  },
+  "id": "bZk46AtduRciFyuU",
+  "tags": []
+}

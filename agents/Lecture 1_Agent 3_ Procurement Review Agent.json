@@ -1,0 +1,294 @@
+{
+  "name": "Lecture 1 Demo: Procurement Review Agent (Fixed)",
+  "nodes": [
+    {
+      "parameters": {
+        "content": "## Procurement Review Agent\n\n**Purpose:** Demonstrates tool usage and guardrails\n\n**What it does:**\n- Reviews vendor quotes\n- Checks prices against history\n- Validates vendor status\n- Flags items needing human review\n\n**Key Concepts:**\n- Multiple tools (price check, vendor lookup)\n- Guardrails ($10k threshold, approved vendor list)\n- Human-in-the-loop gates\n- Risk scoring",
+        "height": 380,
+        "width": 420
+      },
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        -1072,
+        -256
+      ],
+      "id": "a41c8d23-e1ed-47a4-ac61-f5fec751a136",
+      "name": "Sticky Note"
+    },
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "procurement-review",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [
+        -576,
+        48
+      ],
+      "id": "109bbe78-216f-4a5d-a7dc-015ca29f2cb2",
+      "webhookId": "procurement-review-demo",
+      "name": "Quote Submission"
+    },
+    {
+      "parameters": {
+        "jsCode": "// TOOL 1: Check price against historical data\n// This simulates checking a database of past purchases\n\nconst item = $input.item_name || $input.item.json.item_name;\nconst price = parseFloat($input.price || $input.item.json.price);\nconst quantity = parseInt($input.quantity || $input.item.json.quantity);\nconst vendor = $input.vendor_name || $input.item.json.vendor_name;\n\n// Simulated historical price data\nconst priceHistory = {\n  \"laptop\": { avg: 1200, min: 1000, max: 1500 },\n  \"monitor\": { avg: 300, min: 250, max: 400 },\n  \"desk_chair\": { avg: 250, min: 200, max: 350 },\n  \"software_license\": { avg: 500, min: 400, max: 600 },\n  \"server\": { avg: 5000, min: 4000, max: 7000 }\n};\n\nconst history = priceHistory[item] || { avg: 0, min: 0, max: 0 };\nconst variance = history.avg > 0 ? ((price - history.avg) / history.avg * 100) : 0;\n\nlet price_flag = \"OK\";\nlet price_reasoning = \"Within normal range\";\n\nif (price > history.max * 1.2) {\n  price_flag = \"HIGH_VARIANCE\";\n  price_reasoning = `Price is ${variance.toFixed(1)}% above average (${history.avg})`;\n} else if (price < history.min * 0.8) {\n  price_flag = \"SUSPICIOUSLY_LOW\";\n  price_reasoning = \"Price is unusually low - possible quality concern\";\n}\n\nreturn {\n  json: {\n    item_name: item,\n    quantity: quantity,\n    price: price,\n    vendor_name: vendor,\n    price_check: {\n      flag: price_flag,\n      variance_percent: variance.toFixed(1),\n      historical_avg: history.avg,\n      historical_min: history.min,\n      historical_max: history.max,\n      reasoning: price_reasoning\n    }\n  }\n};"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -352,
+        48
+      ],
+      "id": "9d650ce6-580a-492d-b558-f90dee63d9dc",
+      "name": "TOOL 1: Check Historical Prices"
+    },
+    {
+      "parameters": {
+        "content": "## TOOL 1: Price History Check\n\nThis simulates a database lookup.\n\nIn a real system:\n- Query actual purchase history\n- Calculate statistical variance\n- Account for market conditions\n- Consider item specifications\n\nNote: This is a mock tool for demonstration",
+        "height": 220,
+        "width": 280
+      },
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        -416,
+        -176
+      ],
+      "id": "cd515fc6-f0d9-4daf-8dca-420b79e6b0b7",
+      "name": "Sticky Note1"
+    },
+    {
+      "parameters": {
+        "jsCode": "// TOOL 2: Check vendor approval status\n// This simulates checking against an approved vendor list\n\nconst vendor = $input.item.json.vendor_name;\n\n// Simulated approved vendor database\nconst approvedVendors = {\n  \"TechCorp\": { status: \"approved\", rating: 4.5, history_count: 50 },\n  \"OfficeSupplies Inc\": { status: \"approved\", rating: 4.2, history_count: 120 },\n  \"Global Tech\": { status: \"approved\", rating: 3.8, history_count: 30 },\n  \"Budget Hardware\": { status: \"probation\", rating: 3.0, history_count: 5 },\n  \"Unknown Vendor\": { status: \"not_approved\", rating: 0, history_count: 0 }\n};\n\nconst vendorInfo = approvedVendors[vendor] || { \n  status: \"not_approved\", \n  rating: 0, \n  history_count: 0 \n};\n\nlet vendor_flag = \"OK\";\nlet vendor_reasoning = \"Approved vendor with good history\";\n\nif (vendorInfo.status === \"not_approved\") {\n  vendor_flag = \"NOT_APPROVED\";\n  vendor_reasoning = \"Vendor is not on approved list - requires procurement review\";\n} else if (vendorInfo.status === \"probation\") {\n  vendor_flag = \"PROBATION\";\n  vendor_reasoning = \"Vendor is on probation status - extra scrutiny required\";\n} else if (vendorInfo.rating < 3.5) {\n  vendor_flag = \"LOW_RATING\";\n  vendor_reasoning = `Vendor rating (${vendorInfo.rating}) is below acceptable threshold`;\n}\n\nreturn {\n  json: {\n    ...($input.item.json),\n    vendor_check: {\n      flag: vendor_flag,\n      status: vendorInfo.status,\n      rating: vendorInfo.rating,\n      history_count: vendorInfo.history_count,\n      reasoning: vendor_reasoning\n    }\n  }\n};"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -128,
+        48
+      ],
+      "id": "2036893a-5b3f-496e-9a92-4c54048d1665",
+      "name": "TOOL 2: Check Vendor Status"
+    },
+    {
+      "parameters": {
+        "content": "## TOOL 2: Vendor Approval Check\n\nThis verifies vendor credentials.\n\nIn a real system:\n- Check ERP vendor master data\n- Verify compliance documents\n- Review past performance\n- Check blacklist status\n\nNote: Mock tool for demonstration",
+        "height": 220,
+        "width": 280
+      },
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        -224,
+        -176
+      ],
+      "id": "f1cb7e43-be8b-4d5c-bf8f-37b1935e1a63",
+      "name": "Sticky Note2"
+    },
+    {
+      "parameters": {
+        "promptType": "define",
+        "text": "=## SYSTEM INSTRUCTION: Procurement Review Agent\n\nROLE: You are a procurement review assistant that validates vendor quotes.\n\nGOAL: Identify potential issues in quotes and flag items needing human review.\n\nCAPABILITIES:\nYou have already used these tools (results provided):\n- price_check: Compared quote price to historical data\n- vendor_check: Verified vendor approval status\n\nCONSTRAINTS:\n- You MUST flag any quote >$10,000 for human approval\n- You MUST NOT auto-approve vendors not on the approved list\n- You MUST flag high price variances (>20%) for review\n- When data conflicts or is suspicious, always err on the side of caution\n- You MUST NOT make purchasing decisions - only provide recommendations\n\nRISK SCORING:\n- Low Risk (0-30): Minor issues, can proceed with standard approval\n- Medium Risk (31-60): Requires manager review\n- High Risk (61-100): Requires procurement specialist review\n\nPROCESS:\n1. Review the quote details and tool results\n2. Assess each flag from the tools\n3. Apply mandatory guardrails (price threshold, vendor status)\n4. Calculate total risk score\n5. Provide clear recommendation\n\nOUTPUT FORMAT: Respond with ONLY valid JSON, no other text:\n{\n  \"status\": \"APPROVED|NEEDS_REVIEW|REJECTED\",\n  \"risk_score\": 0-100,\n  \"flags\": [\"list of issues\"],\n  \"recommendation\": \"clear action statement\",\n  \"reasoning\": \"brief explanation\"\n}\n\n## QUOTE TO REVIEW:\nItem: {{ $json.item_name }}\nQuantity: {{ $json.quantity }}\nPrice per unit: ${{ $json.price }}\nTotal: ${{ $json.price * $json.quantity }}\nVendor: {{ $json.vendor_name }}\n\n## TOOL RESULTS:\nPrice Check: {{ JSON.stringify($json.price_check) }}\nVendor Check: {{ JSON.stringify($json.vendor_check) }}\n\nRemember: Output ONLY valid JSON.",
+        "options": {
+          "systemMessage": "You are a risk assessment assistant. Output only valid JSON with no additional text or markdown formatting."
+        }
+      },
+      "type": "@n8n/n8n-nodes-langchain.agent",
+      "typeVersion": 1.7,
+      "position": [
+        96,
+        48
+      ],
+      "id": "844296e2-8975-4b0e-abe8-cf9970c76b4d",
+      "name": "AGENT: Review & Assess Risk"
+    },
+    {
+      "parameters": {
+        "model": "llama-3.3-70b-versatile",
+        "options": {}
+      },
+      "type": "@n8n/n8n-nodes-langchain.lmChatGroq",
+      "typeVersion": 1,
+      "position": [
+        168,
+        272
+      ],
+      "id": "14538342-d179-4255-87aa-da23bada0b63",
+      "name": "Groq LLM (Llama 3.3 70B)",
+      "credentials": {
+        "groqApi": {
+          "id": "9FfZtV8pFbhPx4mJ",
+          "name": "Groq account 2"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "content": "## Agent Decision Making\n\nThe agent:\n1. Receives tool results\n2. Applies system instructions\n3. Enforces guardrails:\n   - $10k threshold\n   - Approved vendor requirement\n   - Price variance limits\n4. Calculates risk score\n5. Makes recommendation\n\n**Not a purchasing decision** - only a recommendation for humans\n\n**Using Groq (Llama 3.3 70B)** for fast inference",
+        "height": 300,
+        "width": 300
+      },
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        -16,
+        -240
+      ],
+      "id": "5fa20143-1491-4920-9260-8aacdc84890b",
+      "name": "Sticky Note3"
+    },
+    {
+      "parameters": {
+        "jsCode": "// Parse agent response and apply final guardrails\nlet response = $input.item.json.output || $input.item.json.text || $input.item.json.response || JSON.stringify($input.item.json);\nlet assessment;\n\ntry {\n  // Clean up markdown formatting if present\n  response = response.replace(/```json\\n?/g, '').replace(/```\\n?/g, '').trim();\n  assessment = JSON.parse(response);\n} catch (e) {\n  // Fallback if parse fails\n  assessment = {\n    status: \"NEEDS_REVIEW\",\n    risk_score: 100,\n    flags: [\"System error in assessment: \" + e.message],\n    recommendation: \"Manual review required due to system error\",\n    reasoning: \"Unable to parse agent response\"\n  };\n}\n\n// Get original data\nconst originalData = $('TOOL 2: Check Vendor Status').item.json;\nconst total_cost = originalData.price * originalData.quantity;\n\n// Apply mandatory guardrails\nif (total_cost > 10000) {\n  assessment.status = \"NEEDS_REVIEW\";\n  if (!assessment.flags.includes(\"MANDATORY: Amount exceeds $10,000 threshold\")) {\n    assessment.flags.push(\"MANDATORY: Amount exceeds $10,000 threshold\");\n  }\n  assessment.risk_score = Math.max(assessment.risk_score, 70);\n}\n\nif (originalData.vendor_check.flag === \"NOT_APPROVED\") {\n  assessment.status = \"REJECTED\";\n  if (!assessment.flags.includes(\"MANDATORY: Vendor not approved\")) {\n    assessment.flags.push(\"MANDATORY: Vendor not approved\");\n  }\n  assessment.risk_score = 100;\n}\n\nreturn {\n  json: {\n    quote_details: {\n      item: originalData.item_name,\n      quantity: originalData.quantity,\n      unit_price: originalData.price,\n      total_cost: total_cost,\n      vendor: originalData.vendor_name\n    },\n    tool_results: {\n      price_check: originalData.price_check,\n      vendor_check: originalData.vendor_check\n    },\n    assessment: assessment,\n    next_action: assessment.status === \"APPROVED\" ? \"Proceed to standard approval workflow\" :\n                 assessment.status === \"NEEDS_REVIEW\" ? \"Route to procurement manager\" :\n                 \"Return to requester for vendor change\"\n  }\n};"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        448,
+        48
+      ],
+      "id": "a0ea015d-a3db-4ca8-915a-627065c35da3",
+      "name": "Apply Final Guardrails"
+    },
+    {
+      "parameters": {
+        "content": "## Guardrails Enforcement\n\nThis is a critical safety layer:\n- Enforces hard rules (thresholds)\n- Cannot be overridden by agent\n- Acts as final check\n\nExample guardrails:\n- $10k+ requires approval\n- Unapproved vendors rejected\n- High risk always reviewed\n\nThis ensures the agent cannot violate critical business rules",
+        "height": 280,
+        "width": 300
+      },
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        192,
+        -240
+      ],
+      "id": "f8d16f56-3fdf-4414-82e5-ed50f53eaefb",
+      "name": "Sticky Note4"
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ $json }}",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [
+        672,
+        48
+      ],
+      "id": "cf169631-ef5c-4f4f-b7f4-c72641e83e9a",
+      "name": "Return Assessment"
+    },
+    {
+      "parameters": {
+        "content": "## Testing This Agent\n\n**Test Case 1 - Should APPROVE (Low Risk):**\n```json\n{\n  \"item_name\": \"laptop\",\n  \"quantity\": 5,\n  \"price\": 1250,\n  \"vendor_name\": \"TechCorp\"\n}\n```\nExpected: APPROVED, Risk: 0-30, Total: $6,250\n\n---\n\n**Test Case 2 - Should NEED REVIEW (High Amount):**\n```json\n{\n  \"item_name\": \"server\",\n  \"quantity\": 3,\n  \"price\": 5000,\n  \"vendor_name\": \"Global Tech\"\n}\n```\nExpected: NEEDS_REVIEW, Risk: 70+, Total: $15,000\nReason: Exceeds $10k threshold\n\n---\n\n**Test Case 3 - Should REJECT (Unapproved Vendor):**\n```json\n{\n  \"item_name\": \"laptop\",\n  \"quantity\": 10,\n  \"price\": 1200,\n  \"vendor_name\": \"Shady Electronics\"\n}\n```\nExpected: REJECTED, Risk: 100\nReason: Vendor not on approved list\n\n---\n\n**Test Case 4 - Should NEED REVIEW (High Price):**\n```json\n{\n  \"item_name\": \"monitor\",\n  \"quantity\": 20,\n  \"price\": 500,\n  \"vendor_name\": \"OfficeSupplies Inc\"\n}\n```\nExpected: NEEDS_REVIEW, Risk: 40-60\nReason: 66.7% above average price\n\n---\n\n**Test Case 5 - Should NEED REVIEW (Probation Vendor):**\n```json\n{\n  \"item_name\": \"desk_chair\",\n  \"quantity\": 15,\n  \"price\": 240,\n  \"vendor_name\": \"Budget Hardware\"\n}\n```\nExpected: NEEDS_REVIEW, Risk: 40-60\nReason: Vendor on probation status",
+        "height": 908,
+        "width": 420
+      },
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        864,
+        -448
+      ],
+      "id": "91a868ef-28e0-49c7-b6ad-3a2b7a95ef6d",
+      "name": "Sticky Note5"
+    }
+  ],
+  "pinData": {
+    "Quote Submission": [
+      {
+        "json": {
+          "item_name": "laptop",
+          "quantity": 5,
+          "price": 1250,
+          "vendor_name": "TechCorp"
+        }
+      }
+    ]
+  },
+  "connections": {
+    "Quote Submission": {
+      "main": [
+        [
+          {
+            "node": "TOOL 1: Check Historical Prices",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "TOOL 1: Check Historical Prices": {
+      "main": [
+        [
+          {
+            "node": "TOOL 2: Check Vendor Status",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "TOOL 2: Check Vendor Status": {
+      "main": [
+        [
+          {
+            "node": "AGENT: Review & Assess Risk",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "AGENT: Review & Assess Risk": {
+      "main": [
+        [
+          {
+            "node": "Apply Final Guardrails",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Groq LLM (Llama 3.3 70B)": {
+      "ai_languageModel": [
+        [
+          {
+            "node": "AGENT: Review & Assess Risk",
+            "type": "ai_languageModel",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Apply Final Guardrails": {
+      "main": [
+        [
+          {
+            "node": "Return Assessment",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "versionId": "aeabeda3-9ef0-406b-b8e1-dbc94cf6e60a",
+  "meta": {
+    "templateCredsSetupCompleted": true,
+    "instanceId": "41d1e72e4425af7bb5431f5a3935e005f1f2bc790948207b9a931061d160b4be"
+  },
+  "id": "pXGPCf7ZTBcVW9ig",
+  "tags": []
+}

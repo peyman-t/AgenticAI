@@ -1,0 +1,358 @@
+{
+  "name": "Circuit Breaker Service Protection with Redis State Management",
+  "nodes": [
+    {
+      "parameters": {},
+      "id": "71bd24f3-ab91-4ca2-9774-c63255dfab29",
+      "name": "Manual Trigger",
+      "type": "n8n-nodes-base.manualTrigger",
+      "typeVersion": 1,
+      "position": [
+        832,
+        288
+      ]
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "id-1",
+              "name": "service_name",
+              "value": "external-api",
+              "type": "string"
+            },
+            {
+              "id": "id-2",
+              "name": "failure_threshold",
+              "value": 5,
+              "type": "number"
+            },
+            {
+              "id": "id-3",
+              "name": "open_duration_ms",
+              "value": 30000,
+              "type": "number"
+            },
+            {
+              "id": "id-4",
+              "name": "redis_key_prefix",
+              "value": "circuit",
+              "type": "string"
+            },
+            {
+              "id": "id-5",
+              "name": "redis_ttl_seconds",
+              "value": 300,
+              "type": "number"
+            }
+          ]
+        },
+        "includeOtherFields": true,
+        "options": {}
+      },
+      "id": "d57d4bac-4df8-48ed-abc3-1262f35e483f",
+      "name": "Workflow Configuration",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        1056,
+        288
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "get",
+        "propertyName": "circuitState",
+        "key": "={{ $('Workflow Configuration').first().json.redis_key_prefix }}:{{ $('Workflow Configuration').first().json.service_name }}",
+        "options": {}
+      },
+      "id": "89c322dc-2edf-4e73-b26a-ae2fce2d5c83",
+      "name": "Redis - Get Circuit State",
+      "type": "n8n-nodes-base.redis",
+      "typeVersion": 1,
+      "position": [
+        1280,
+        288
+      ],
+      "credentials": {
+        "redis": {
+          "id": "umVznYF7HXq85PMS",
+          "name": "Redis account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "const config = $('Workflow Configuration').first().json;\nconst redisData = $('Redis - Get Circuit State').first().json;\n\n// Parse circuit state from Redis (if exists)\nlet circuit = { state: 'CLOSED', failures: 0 };\nif (redisData && redisData.value) {\n  try {\n    circuit = JSON.parse(redisData.value);\n  } catch (e) {\n    circuit = { state: 'CLOSED', failures: 0 };\n  }\n}\n\nconst now = Date.now();\nconst openDurationMs = config.open_duration_ms;\n\nif (circuit.state === 'OPEN') {\n  // Check if enough time has passed to try again\n  if (now - circuit.last_failure > openDurationMs) {\n    return {\n      json: {\n        circuit_state: 'HALF_OPEN',\n        action: 'try_request',\n        current_failures: circuit.failures,\n        service_name: config.service_name\n      }\n    };\n  } else {\n    return {\n      json: {\n        circuit_state: 'OPEN',\n        action: 'reject',\n        message: 'Circuit breaker is OPEN. Service unavailable.',\n        retry_after_ms: openDurationMs - (now - circuit.last_failure),\n        service_name: config.service_name\n      }\n    };\n  }\n}\n\nreturn {\n  json: {\n    circuit_state: circuit.state,\n    action: 'try_request',\n    current_failures: circuit.failures,\n    service_name: config.service_name\n  }\n};"
+      },
+      "id": "b4e3acf4-9260-4ac0-9aa9-46b28f4265d2",
+      "name": "Code - Check Circuit State",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1504,
+        288
+      ]
+    },
+    {
+      "parameters": {
+        "rules": {
+          "values": [
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 2
+                },
+                "conditions": [
+                  {
+                    "leftValue": "={{ $json.action }}",
+                    "rightValue": "reject",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    },
+                    "id": "f9a01418-05b5-40b8-bfe5-686a637a38be"
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "Reject"
+            },
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 2
+                },
+                "conditions": [
+                  {
+                    "leftValue": "={{ $json.action }}",
+                    "rightValue": "try_request",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    },
+                    "id": "95a1d6d1-a637-41a3-9e14-f4ed0ef0ab7d"
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "Try Request"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "3ae5a0ef-6411-4029-888d-28c5a95d7332",
+      "name": "Switch - Route by Action",
+      "type": "n8n-nodes-base.switch",
+      "typeVersion": 3.3,
+      "position": [
+        1728,
+        288
+      ]
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "id-1",
+              "name": "status",
+              "value": "circuit_open",
+              "type": "string"
+            },
+            {
+              "id": "id-2",
+              "name": "success",
+              "value": false,
+              "type": "boolean"
+            }
+          ]
+        },
+        "includeOtherFields": true,
+        "options": {}
+      },
+      "id": "fae2f8fa-04b8-40f2-acff-23ec03385fc5",
+      "name": "Return Error - Circuit Open",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        1952,
+        192
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "const config = $('Workflow Configuration').first().json;\nconst checkState = $('Code - Check Circuit State').first().json;\n\n// Simulate service call result for testing\n// In production, this would come from an actual HTTP request\nconst simulateSuccess = Math.random() > 0.3; // 70% success rate for testing\n\nif (simulateSuccess) {\n  // Success: Reset circuit to CLOSED\n  return {\n    json: {\n      new_state: 'CLOSED',\n      failures: 0,\n      result: { message: 'Service call successful', data: { timestamp: Date.now() } },\n      service_name: config.service_name,\n      success: true\n    }\n  };\n} else {\n  // Failure: Increment counter\n  const failures = (checkState.current_failures || 0) + 1;\n  const failureThreshold = config.failure_threshold;\n  \n  return {\n    json: {\n      new_state: failures >= failureThreshold ? 'OPEN' : 'CLOSED',\n      failures: failures,\n      last_failure: Date.now(),\n      error: 'Simulated service failure',\n      service_name: config.service_name,\n      success: false\n    }\n  };\n}"
+      },
+      "id": "80555fb0-821d-4a70-a81b-b123e0d5eaef",
+      "name": "Code - Update Circuit State",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1952,
+        384
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "set",
+        "key": "={{ $('Workflow Configuration').first().json.redis_key_prefix }}:{{ $json.service_name }}",
+        "value": "={{ JSON.stringify({ state: $json.new_state, failures: $json.failures, last_failure: $json.last_failure }) }}",
+        "expire": true,
+        "ttl": "={{ $('Workflow Configuration').first().json.redis_ttl_seconds }}"
+      },
+      "id": "5f5c991e-812e-45dc-8db7-166d2ca9b9e5",
+      "name": "Redis - Save Circuit State",
+      "type": "n8n-nodes-base.redis",
+      "typeVersion": 1,
+      "position": [
+        2176,
+        384
+      ],
+      "credentials": {
+        "redis": {
+          "id": "umVznYF7HXq85PMS",
+          "name": "Redis account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "id-1",
+              "name": "status",
+              "value": "completed",
+              "type": "string"
+            },
+            {
+              "id": "id-2",
+              "name": "timestamp",
+              "value": "={{ new Date().toISOString() }}",
+              "type": "string"
+            }
+          ]
+        },
+        "includeOtherFields": true,
+        "options": {}
+      },
+      "id": "8473a647-ca3e-486c-904b-56c9da0a3df4",
+      "name": "Return Result",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        2400,
+        384
+      ]
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "Manual Trigger": {
+      "main": [
+        [
+          {
+            "node": "Workflow Configuration",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Workflow Configuration": {
+      "main": [
+        [
+          {
+            "node": "Redis - Get Circuit State",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Redis - Get Circuit State": {
+      "main": [
+        [
+          {
+            "node": "Code - Check Circuit State",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Code - Check Circuit State": {
+      "main": [
+        [
+          {
+            "node": "Switch - Route by Action",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Switch - Route by Action": {
+      "main": [
+        [
+          {
+            "node": "Return Error - Circuit Open",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Code - Update Circuit State",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Code - Update Circuit State": {
+      "main": [
+        [
+          {
+            "node": "Redis - Save Circuit State",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Redis - Save Circuit State": {
+      "main": [
+        [
+          {
+            "node": "Return Result",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "versionId": "08d10e01-71b0-4fe2-80de-2117494b67d3",
+  "meta": {
+    "templateCredsSetupCompleted": true,
+    "instanceId": "41d1e72e4425af7bb5431f5a3935e005f1f2bc790948207b9a931061d160b4be"
+  },
+  "id": "VUA82B7HMUYSDpRR",
+  "tags": []
+}

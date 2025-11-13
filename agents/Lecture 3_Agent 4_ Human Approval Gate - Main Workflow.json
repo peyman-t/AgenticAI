@@ -1,0 +1,618 @@
+{
+  "name": "Agent 4: Human Approval Gate - Main Workflow",
+  "nodes": [
+    {
+      "parameters": {
+        "jsCode": "const input = $input.first().json;\nconst actionType = input.action_type || input.action;\nconst parameters = input.parameters || {};\n\n// Risk scoring system\nconst riskFactors = {\n  // Action type risk\n  send_email_external: 30,\n  make_payment: 50,\n  delete_data: 40,\n  escalate_to_legal: 35,\n  update_record: 10,\n  read_data: 5,\n  send_internal_message: 5\n};\n\n// Calculate base risk from action type\nlet riskScore = riskFactors[actionType] || 20;\n\n// Add risk based on parameters\nif (parameters.amount && parameters.amount > 1000) {\n  riskScore += 20;\n} else if (parameters.amount && parameters.amount > 100) {\n  riskScore += 10;\n}\n\nif (parameters.external_recipient) {\n  riskScore += 15;\n}\n\nif (parameters.irreversible === true) {\n  riskScore += 15;\n}\n\n// Determine risk level\nlet riskLevel = 'low';\nlet requiresApproval = false;\n\nif (riskScore >= 40) {\n  riskLevel = 'high';\n  requiresApproval = true;\n} else if (riskScore >= 20) {\n  riskLevel = 'medium';\n  requiresApproval = true;\n}\n\nreturn {\n  json: {\n    ...input,\n    risk_assessment: {\n      risk_level: riskLevel,\n      total_score: riskScore,\n      requires_approval: requiresApproval\n    }\n  }\n};"
+      },
+      "id": "00742dbf-1856-4445-aa2f-9c8c4aa72e14",
+      "name": "Code - Risk Assessment",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -688,
+        176
+      ]
+    },
+    {
+      "parameters": {
+        "rules": {
+          "values": [
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict"
+                },
+                "conditions": [
+                  {
+                    "leftValue": "={{ $json.risk_assessment.requires_approval }}",
+                    "rightValue": false,
+                    "operator": {
+                      "type": "boolean",
+                      "operation": "false"
+                    }
+                  }
+                ],
+                "combinator": "and"
+              }
+            },
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict"
+                },
+                "conditions": [
+                  {
+                    "leftValue": "={{ $json.risk_assessment.requires_approval }}",
+                    "rightValue": true,
+                    "operator": {
+                      "type": "boolean",
+                      "operation": "true"
+                    }
+                  }
+                ],
+                "combinator": "and"
+              }
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "effde491-05ff-4fa3-90a4-49e7bea3168c",
+      "name": "Switch - Approval Router",
+      "type": "n8n-nodes-base.switch",
+      "typeVersion": 3.3,
+      "position": [
+        -464,
+        176
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "const input = $input.first().json;\n\n// Execute low-risk action immediately\nconst executionResult = {\n  executed: true,\n  action_type: input.action_type || input.action,\n  parameters: input.parameters,\n  executed_at: new Date().toISOString(),\n  execution_id: require('crypto').randomUUID(),\n  approval_required: false\n};\n\nreturn {\n  json: {\n    success: true,\n    status: 'executed_without_approval',\n    risk_level: input.risk_assessment.risk_level,\n    execution_result: executionResult,\n    message: 'Low-risk action executed immediately without approval'\n  }\n};"
+      },
+      "id": "a6dcb4db-a726-4213-8185-87b06b5f29c2",
+      "name": "Code - Execute Low-Risk Action",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -224,
+        32
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "const input = $input.first().json;\nconst crypto = require('crypto');\n\n// Generate unique approval ID\nconst approvalId = crypto.randomUUID();\n\n// Set expiry time (1 hour from now)\nconst requestedAt = new Date();\nconst expiresAt = new Date(requestedAt.getTime() + 60 * 60 * 1000);\n\nreturn {\n  json: {\n    ...input,\n    approval_request: {\n      approval_id: approvalId,\n      status: 'pending',\n      requested_at: requestedAt.toISOString(),\n      expires_at: expiresAt.toISOString(),\n      approval_url: `https://ptptpt.app.n8n.cloud/webhook/approval/respond?id=${approvalId}`\n    }\n  }\n};"
+      },
+      "id": "6f77e0b2-e029-4655-9395-ead2963e2cfd",
+      "name": "Code - Create Approval Request",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -224,
+        192
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "const input = $input.first().json;\nconst approvalId = input.approval_request.approval_id;\n\n// Initialize global memory store if it doesn't exist\nif (!$execution.customData.json) {\n  $execution.customData.json = {};\n}\n\nif (!$execution.customData.json.approvalStore) {\n  $execution.customData.json.approvalStore = {};\n}\n\n// Store approval request in memory\n$execution.customData.json.approvalStore[approvalId] = {\n  approval_id: approvalId,\n  status: 'pending',\n  action_type: input.action_type || input.action,\n  parameters: input.parameters,\n  risk_assessment: input.risk_assessment,\n  requested_by: input.requested_by,\n  session_id: input.session_id,\n  context: input.context,\n  requested_at: input.approval_request.requested_at,\n  expires_at: input.approval_request.expires_at,\n  approved_by: null,\n  approved_at: null,\n  rejection_reason: null\n};\n\nreturn {\n  json: {\n    ...input,\n    memory_stored: true,\n    approval_url: input.approval_request.approval_url\n  }\n};"
+      },
+      "id": "e7474425-61a2-4990-9302-fcbd404ecf18",
+      "name": "Code - Store in Memory",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        0,
+        192
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "const input = $input.first().json;\nconst approvalId = input.approval_request.approval_id;\nconst expiresAt = new Date(input.approval_request.expires_at);\n\nreturn {\n  json: {\n    ...input,\n    polling_config: {\n      approval_id: approvalId,\n      started_at: new Date().toISOString(),\n      expires_at: input.approval_request.expires_at,\n      poll_count: 0\n    }\n  }\n};"
+      },
+      "id": "7831ec35-a366-430a-b608-7fe6bd36513a",
+      "name": "Code - Setup Polling",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        224,
+        192
+      ]
+    },
+    {
+      "parameters": {
+        "amount": 30
+      },
+      "id": "88986110-5d29-4ca5-9cc2-d276e597271d",
+      "name": "Wait - Poll Interval",
+      "type": "n8n-nodes-base.wait",
+      "typeVersion": 1.1,
+      "position": [
+        448,
+        192
+      ],
+      "webhookId": "cb60a474-0194-4958-b386-4366613718e4"
+    },
+    {
+      "parameters": {
+        "jsCode": "const input = $input.first().json;\nconst approvalId = input.polling_config.approval_id;\n\n// Retrieve from memory\nconst approvalStore = $execution.customData.json?.approvalStore || {};\nconst approvalData = approvalStore[approvalId];\n\nif (!approvalData) {\n  return {\n    json: {\n      ...input,\n      status: 'not_found',\n      approved_by: null,\n      approved_at: null,\n      rejection_reason: null\n    }\n  };\n}\n\nreturn {\n  json: {\n    ...input,\n    status: approvalData.status,\n    approved_by: approvalData.approved_by,\n    approved_at: approvalData.approved_at,\n    rejection_reason: approvalData.rejection_reason\n  }\n};"
+      },
+      "id": "60fa2bed-1a5f-48fd-83d7-490c81df6e36",
+      "name": "Code - Check Memory Status",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        672,
+        48
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "const input = $input.first().json;\nconst status = input.status;\nconst expiresAt = new Date(input.polling_config.expires_at);\nconst now = new Date();\n\n// Check if timeout\nconst isTimeout = now >= expiresAt;\n\n// Increment poll count\nconst pollCount = (input.polling_config.poll_count || 0) + 1;\n\nlet continuePolling = false;\nlet finalStatus = status;\n\nif (isTimeout && status === 'pending') {\n  finalStatus = 'timeout';\n  continuePolling = false;\n} else if (status === 'pending') {\n  continuePolling = true;\n} else {\n  continuePolling = false;\n}\n\nreturn {\n  json: {\n    ...input,\n    status: finalStatus,\n    continue_polling: continuePolling,\n    polling_config: {\n      ...input.polling_config,\n      poll_count: pollCount\n    }\n  }\n};"
+      },
+      "id": "2529b46c-a3fa-490c-b69e-8e56db7ccd81",
+      "name": "Code - Check Decision Status",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        896,
+        48
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "id-1",
+              "leftValue": "={{ $json.continue_polling }}",
+              "rightValue": true,
+              "operator": {
+                "type": "boolean",
+                "operation": "equals"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "5d67f5d4-dddf-4147-a491-4553cc139c64",
+      "name": "IF - Continue Polling?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        1120,
+        192
+      ]
+    },
+    {
+      "parameters": {
+        "rules": {
+          "values": [
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 2
+                },
+                "conditions": [
+                  {
+                    "leftValue": "={{ $json.status }}",
+                    "rightValue": "approved",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    },
+                    "id": "43cc0d12-15b3-4295-a0b5-3cf5f54bd792"
+                  }
+                ],
+                "combinator": "and"
+              }
+            },
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 2
+                },
+                "conditions": [
+                  {
+                    "leftValue": "={{ $json.status }}",
+                    "rightValue": "rejected",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    },
+                    "id": "15962c17-adf2-4679-af47-17ca896e0159"
+                  }
+                ],
+                "combinator": "and"
+              }
+            },
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 2
+                },
+                "conditions": [
+                  {
+                    "leftValue": "={{ $json.status }}",
+                    "rightValue": "timeout",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    },
+                    "id": "73952e22-033a-4883-9b6b-26aa24d3c655"
+                  }
+                ],
+                "combinator": "and"
+              }
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "e7dc2282-83b5-47bc-ba8f-2fe9e5a43c9c",
+      "name": "Switch - Approval Decision Router",
+      "type": "n8n-nodes-base.switch",
+      "typeVersion": 3.3,
+      "position": [
+        1344,
+        176
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "const input = $input.first().json;\n\n// Simulate action execution\nconst executionResult = {\n  executed: true,\n  action_type: input.action_type || input.action,\n  parameters: input.parameters,\n  executed_at: new Date().toISOString(),\n  execution_id: require('crypto').randomUUID()\n};\n\nreturn {\n  json: {\n    ...input,\n    execution_result: executionResult\n  }\n};"
+      },
+      "id": "84739231-02f2-4db3-983c-afcf7ac35620",
+      "name": "Code - Execute Approved Action",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1568,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "const input = $input.first().json;\n\nreturn {\n  json: {\n    success: true,\n    status: 'approved_and_executed',\n    approval_id: input.approval_request.approval_id,\n    approved_by: input.approved_by,\n    approved_at: input.approved_at,\n    execution_result: input.execution_result,\n    message: 'Action was approved and executed successfully'\n  }\n};"
+      },
+      "id": "aaf9f103-81e6-4321-9cf7-fb82ca8d303b",
+      "name": "Code - Format Success Response",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1792,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "const input = $input.first().json;\n\nreturn {\n  json: {\n    success: false,\n    status: 'rejected',\n    approval_id: input.approval_request.approval_id,\n    rejected_by: input.approved_by,\n    rejected_at: input.approved_at,\n    rejection_reason: input.rejection_reason || 'No reason provided',\n    message: 'Action was rejected by approver'\n  }\n};"
+      },
+      "id": "338d2b9f-9c9b-4d66-8fb0-9c7e04672f6a",
+      "name": "Code - Format Rejection Response",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1568,
+        192
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "const input = $input.first().json;\n\nreturn {\n  json: {\n    success: false,\n    status: 'timeout',\n    approval_id: input.approval_request.approval_id,\n    expires_at: input.approval_request.expires_at,\n    message: 'Approval request timed out - action was not executed'\n  }\n};"
+      },
+      "id": "43b040b4-29fe-4d4d-9040-837b4893ee50",
+      "name": "Code - Format Timeout Response",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1568,
+        384
+      ]
+    },
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "approval/respond",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "id": "ccac8454-1348-4080-a3de-2094107edd1b",
+      "name": "Webhook - Approval Response",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2.1,
+      "position": [
+        -896,
+        608
+      ],
+      "webhookId": "d2b2c507-c881-41e8-b93b-0b8d4085d5be"
+    },
+    {
+      "parameters": {
+        "jsCode": "const input = $input.first().json;\nconst approvalId = input.query?.id || input.body?.approval_id;\nconst decision = input.body?.decision || 'rejected';\nconst approver = input.body?.approver || 'unknown';\nconst rejectionReason = input.body?.rejection_reason || '';\n\nif (!approvalId) {\n  return {\n    json: {\n      success: false,\n      error: 'Missing approval_id'\n    }\n  };\n}\n\n// Update memory\nconst approvalStore = $execution.customData.json?.approvalStore || {};\n\nif (!approvalStore[approvalId]) {\n  return {\n    json: {\n      success: false,\n      error: 'Approval request not found'\n    }\n  };\n}\n\n// Update the approval status\napprovalStore[approvalId].status = decision === 'approve' ? 'approved' : 'rejected';\napprovalStore[approvalId].approved_by = approver;\napprovalStore[approvalId].approved_at = new Date().toISOString();\napprovalStore[approvalId].rejection_reason = decision === 'reject' ? rejectionReason : null;\n\nreturn {\n  json: {\n    success: true,\n    approval_id: approvalId,\n    decision: approvalStore[approvalId].status,\n    message: `Approval request ${decision === 'approve' ? 'approved' : 'rejected'} successfully`\n  }\n};"
+      },
+      "id": "46345c0b-7111-4a15-bd5a-d63eeadc1fe1",
+      "name": "Code - Update Memory Decision",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -672,
+        608
+      ]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "options": {}
+      },
+      "id": "25b4919d-f95d-4e98-a94c-abef5d3719ef",
+      "name": "Respond to Webhook",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.4,
+      "position": [
+        -448,
+        608
+      ]
+    },
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "agent/action",
+        "responseMode": "lastNode",
+        "options": {}
+      },
+      "id": "0dfe4a19-5055-4a1a-970d-2032209e0787",
+      "name": "Webhook - Agent Action Request",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2.1,
+      "position": [
+        -928,
+        176
+      ],
+      "webhookId": "dad13c86-935e-485c-bf34-0b4ce7b64fde"
+    }
+  ],
+  "pinData": {
+    "Webhook - Approval Response": [
+      {
+        "json": {
+          "approval_id": "ec78460c-4226-4f94-9aef-ddcb39c3d790",
+          "decision": "approved",
+          "approved_by": "manager_jane",
+          "comments": "Verified with customer, approved"
+        }
+      }
+    ],
+    "Webhook - Agent Action Request": [
+      {
+        "json": {
+          "action_type": "make_payment",
+          "parameters": {
+            "amount": 2500,
+            "currency": "USD",
+            "recipient": "vendor@example.com",
+            "description": "Monthly service fee"
+          },
+          "requested_by": "emp_22222",
+          "session_id": "sess_002"
+        }
+      }
+    ]
+  },
+  "connections": {
+    "Code - Risk Assessment": {
+      "main": [
+        [
+          {
+            "node": "Switch - Approval Router",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Switch - Approval Router": {
+      "main": [
+        [
+          {
+            "node": "Code - Execute Low-Risk Action",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Code - Create Approval Request",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Code - Create Approval Request": {
+      "main": [
+        [
+          {
+            "node": "Code - Store in Memory",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Code - Store in Memory": {
+      "main": [
+        [
+          {
+            "node": "Code - Setup Polling",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Code - Setup Polling": {
+      "main": [
+        [
+          {
+            "node": "Wait - Poll Interval",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Wait - Poll Interval": {
+      "main": [
+        [
+          {
+            "node": "Code - Check Memory Status",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Code - Check Memory Status": {
+      "main": [
+        [
+          {
+            "node": "Code - Check Decision Status",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Code - Check Decision Status": {
+      "main": [
+        [
+          {
+            "node": "IF - Continue Polling?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "IF - Continue Polling?": {
+      "main": [
+        [
+          {
+            "node": "Wait - Poll Interval",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Switch - Approval Decision Router",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Switch - Approval Decision Router": {
+      "main": [
+        [
+          {
+            "node": "Code - Execute Approved Action",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Code - Format Rejection Response",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Code - Format Timeout Response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Code - Execute Approved Action": {
+      "main": [
+        [
+          {
+            "node": "Code - Format Success Response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Webhook - Approval Response": {
+      "main": [
+        [
+          {
+            "node": "Code - Update Memory Decision",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Code - Update Memory Decision": {
+      "main": [
+        [
+          {
+            "node": "Respond to Webhook",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Webhook - Agent Action Request": {
+      "main": [
+        [
+          {
+            "node": "Code - Risk Assessment",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "versionId": "e083e21b-6283-4bd3-a599-87deb0f8aa89",
+  "meta": {
+    "templateCredsSetupCompleted": true,
+    "instanceId": "41d1e72e4425af7bb5431f5a3935e005f1f2bc790948207b9a931061d160b4be"
+  },
+  "id": "9FyG3nu2K1KMPGAa",
+  "tags": []
+}

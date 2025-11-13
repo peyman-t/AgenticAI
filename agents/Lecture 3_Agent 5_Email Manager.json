@@ -1,0 +1,472 @@
+{
+  "name": "Email Manager",
+  "nodes": [
+    {
+      "parameters": {
+        "html": "={{ $json.snippet }}",
+        "options": {}
+      },
+      "id": "2cfdca1d-f17f-4244-8e04-1f62a1d2a77e",
+      "name": "Markdown",
+      "type": "n8n-nodes-base.markdown",
+      "position": [
+        560,
+        432
+      ],
+      "typeVersion": 1
+    },
+    {
+      "parameters": {
+        "operationMode": "nodeInputBinary",
+        "options": {
+          "binaryDataKey": "={{ $json.data }}",
+          "summarizationMethodAndPrompts": {
+            "values": {
+              "combineMapPrompt": "=Write a concise summary of the following in max 100 words:\n\n\"{{ $json.data }}\"\n\nDo not enter the total number of words used.",
+              "prompt": "=Write a concise summary of the following in max 100 words:\n\n\"{{ $json.data }}\"\n\nDo not enter the total number of words used."
+            }
+          }
+        }
+      },
+      "id": "111f2604-8f69-4a24-a8ab-fc2b8976de58",
+      "name": "Email Summarization Chain",
+      "type": "@n8n/n8n-nodes-langchain.chainSummarization",
+      "position": [
+        816,
+        432
+      ],
+      "typeVersion": 2
+    },
+    {
+      "parameters": {
+        "promptType": "define",
+        "text": "=Write the text to reply to the following email:\n\n{{ $json.response.text }}",
+        "hasOutputParser": true,
+        "options": {
+          "systemMessage": "You are an expert at answering emails. You need to answer them professionally based on the information you have. This is a business email. Be concise and never exceed 100 words. Only the body of the email, not create the subject"
+        }
+      },
+      "id": "f9af4e02-2ef2-4147-88b3-3b21e4817bc4",
+      "name": "Write email",
+      "type": "@n8n/n8n-nodes-langchain.agent",
+      "position": [
+        1264,
+        432
+      ],
+      "typeVersion": 1.7
+    },
+    {
+      "parameters": {
+        "model": {
+          "__rl": true,
+          "mode": "list",
+          "value": "gpt-4o-mini",
+          "cachedResultName": "gpt-4o-mini"
+        },
+        "options": {}
+      },
+      "id": "51d581ab-1d1c-44f3-996b-a4d5bcb20eec",
+      "name": "OpenAI",
+      "type": "@n8n/n8n-nodes-langchain.lmChatOpenAi",
+      "position": [
+        1200,
+        656
+      ],
+      "typeVersion": 1.2,
+      "credentials": {
+        "openAiApi": {
+          "id": "k4hQJPTzNMv31gPt",
+          "name": "OpenAi account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "content": "Chain that summarizes the received email",
+        "height": 240,
+        "width": 320
+      },
+      "id": "9e66930a-7c32-4b59-b521-7f08ddeffb06",
+      "name": "Sticky Note2",
+      "type": "n8n-nodes-base.stickyNote",
+      "position": [
+        800,
+        352
+      ],
+      "typeVersion": 1
+    },
+    {
+      "parameters": {
+        "content": "Agent that retrieves business information from a vector database and processes the response",
+        "height": 240,
+        "width": 340
+      },
+      "id": "cce2c469-b00c-4446-9e76-322066dfeca3",
+      "name": "Sticky Note5",
+      "type": "n8n-nodes-base.stickyNote",
+      "position": [
+        1248,
+        352
+      ],
+      "typeVersion": 1
+    },
+    {
+      "parameters": {
+        "content": "Convert email to Markdown format for better understanding of LLM models",
+        "height": 240
+      },
+      "id": "0291de7a-c253-4f92-9cf3-ad35455a77ac",
+      "name": "Sticky Note1",
+      "type": "n8n-nodes-base.stickyNote",
+      "position": [
+        496,
+        352
+      ],
+      "typeVersion": 1
+    },
+    {
+      "parameters": {
+        "content": "If the feedback is OK send email",
+        "height": 180
+      },
+      "id": "e0a1f72f-9f83-4330-a6e4-0aac5e06b802",
+      "name": "Sticky Note7",
+      "type": "n8n-nodes-base.stickyNote",
+      "position": [
+        2224,
+        400
+      ],
+      "typeVersion": 1
+    },
+    {
+      "parameters": {
+        "model": {
+          "__rl": true,
+          "value": "gpt-4.1-mini",
+          "mode": "list",
+          "cachedResultName": "gpt-4.1-mini"
+        },
+        "options": {}
+      },
+      "id": "20606e02-5f28-4187-a0f0-da8346bea177",
+      "name": "OpenAI Chat Model",
+      "type": "@n8n/n8n-nodes-langchain.lmChatOpenAi",
+      "position": [
+        784,
+        656
+      ],
+      "typeVersion": 1.2,
+      "credentials": {
+        "openAiApi": {
+          "id": "k4hQJPTzNMv31gPt",
+          "name": "OpenAi account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "35d7c303-42f4-4dd1-b41e-6eb087c23c3d",
+              "name": "email",
+              "type": "string",
+              "value": "={{ $json.output }}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "7a061ed5-9909-42e0-a959-d17c29dfd35e",
+      "name": "Set Email text",
+      "type": "n8n-nodes-base.set",
+      "position": [
+        1696,
+        432
+      ],
+      "typeVersion": 3.4
+    },
+    {
+      "parameters": {
+        "content": "Human in the loop",
+        "height": 180
+      },
+      "id": "086e2a0b-2dd5-4669-9250-a2e8251aca6c",
+      "name": "Sticky Note",
+      "type": "n8n-nodes-base.stickyNote",
+      "position": [
+        1920,
+        400
+      ],
+      "typeVersion": 1
+    },
+    {
+      "parameters": {
+        "content": "# How it works\nThis workflow automates the handling of incoming emails, summarizes their content, generates appropriate responses and validate it through send IMAP email with \"Human in the loop\" system. \n\nYou can quickly integrate Gmail and Outlook via the appropriate nodes",
+        "height": 260,
+        "width": 540,
+        "color": 3
+      },
+      "id": "b1de393f-59bc-494b-bb86-819306da14a4",
+      "name": "Sticky Note11",
+      "type": "n8n-nodes-base.stickyNote",
+      "position": [
+        496,
+        32
+      ],
+      "typeVersion": 1
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "version": 2,
+            "leftValue": "",
+            "caseSensitive": true,
+            "typeValidation": "strict"
+          },
+          "combinator": "and",
+          "conditions": [
+            {
+              "id": "62e26bc5-1732-4699-a602-99490c7406fd",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              },
+              "leftValue": "={{ $json.data.approved }}",
+              "rightValue": ""
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "cdf458aa-cca9-4aae-9a35-e4da1b44a85f",
+      "name": "Approved?",
+      "type": "n8n-nodes-base.if",
+      "position": [
+        2288,
+        432
+      ],
+      "typeVersion": 2.2
+    },
+    {
+      "parameters": {
+        "operation": "get",
+        "messageId": "={{ $json.id }}"
+      },
+      "type": "n8n-nodes-base.gmail",
+      "typeVersion": 2.1,
+      "position": [
+        400,
+        640
+      ],
+      "id": "7cfed089-59fb-430c-ade9-986716afa932",
+      "name": "Get a message",
+      "webhookId": "a6d44147-d24e-4314-938b-aca84a683caa",
+      "credentials": {
+        "gmailOAuth2": {
+          "id": "7WpjY0GoqLAvtZeJ",
+          "name": "Gmail account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "pollTimes": {
+          "item": [
+            {
+              "mode": "everyMinute"
+            }
+          ]
+        },
+        "filters": {}
+      },
+      "id": "0875ddcb-0b4c-4ed8-a62e-2b23ce6ccdac",
+      "name": "Gmail Trigger1",
+      "type": "n8n-nodes-base.gmailTrigger",
+      "position": [
+        160,
+        640
+      ],
+      "typeVersion": 1.2,
+      "credentials": {
+        "gmailOAuth2": {
+          "id": "7WpjY0GoqLAvtZeJ",
+          "name": "Gmail account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "sendAndWait",
+        "sendTo": "peyman.teymoori@usn.no",
+        "subject": "Approval required",
+        "message": "Please, pleaaaaaase!",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.gmail",
+      "typeVersion": 2.1,
+      "position": [
+        2000,
+        432
+      ],
+      "id": "e26e7252-41a3-485a-8b4d-288bfd1c5658",
+      "name": "Send message and wait for response",
+      "webhookId": "7de65eb6-a8ca-4a05-a96a-806583521e05",
+      "credentials": {
+        "gmailOAuth2": {
+          "id": "7WpjY0GoqLAvtZeJ",
+          "name": "Gmail account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "sendTo": "={{ $('Gmail Trigger1').item.json.From}}",
+        "subject": "=Re: {{ $('Get a message').item.json.Subject }}",
+        "message": "={{ $('Set Email text').item.json.email }}",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.gmail",
+      "typeVersion": 2.1,
+      "position": [
+        2592,
+        416
+      ],
+      "id": "b863454a-d9cf-400d-8211-7b2367579980",
+      "name": "Send a message",
+      "webhookId": "cf0d9b50-b4b8-49d3-9148-a2d341bfe1a8",
+      "credentials": {
+        "gmailOAuth2": {
+          "id": "7WpjY0GoqLAvtZeJ",
+          "name": "Gmail account"
+        }
+      }
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "OpenAI": {
+      "ai_languageModel": [
+        [
+          {
+            "node": "Write email",
+            "type": "ai_languageModel",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Markdown": {
+      "main": [
+        [
+          {
+            "node": "Email Summarization Chain",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Approved?": {
+      "main": [
+        [
+          {
+            "node": "Send a message",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Write email": {
+      "main": [
+        [
+          {
+            "node": "Set Email text",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Set Email text": {
+      "main": [
+        [
+          {
+            "node": "Send message and wait for response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "OpenAI Chat Model": {
+      "ai_languageModel": [
+        [
+          {
+            "node": "Email Summarization Chain",
+            "type": "ai_languageModel",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Email Summarization Chain": {
+      "main": [
+        [
+          {
+            "node": "Write email",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Gmail Trigger1": {
+      "main": [
+        [
+          {
+            "node": "Get a message",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get a message": {
+      "main": [
+        [
+          {
+            "node": "Markdown",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Send message and wait for response": {
+      "main": [
+        [
+          {
+            "node": "Approved?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "versionId": "56039f10-8277-480f-875b-e4851e0448ed",
+  "meta": {
+    "templateCredsSetupCompleted": true,
+    "instanceId": "41d1e72e4425af7bb5431f5a3935e005f1f2bc790948207b9a931061d160b4be"
+  },
+  "id": "ChfcnmuYTFTW5oXB",
+  "tags": []
+}

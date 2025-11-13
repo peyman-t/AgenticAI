@@ -1,0 +1,234 @@
+{
+  "name": "Lecture 2 Demo: ReAct Pattern - Customer Support Agent (Fixed)",
+  "nodes": [
+    {
+      "parameters": {
+        "content": "## ReAct Pattern: Customer Support Agent\n\n**What is ReAct?**\nReAct (Reason + Act) is an AI agent pattern where the agent:\n1. **THINKS**: Reasons about what information it needs\n2. **ACTS**: Chooses and executes a tool to gather that information\n3. **OBSERVES**: Examines the result and decides next steps\n4. Repeats until it has enough information to answer\n\n**This Implementation:**\n- Uses n8n's built-in ReAct Agent (no manual loops!)\n- Agent automatically handles the Think→Act→Observe cycle\n- Three tools: Order Status, Product Info, Knowledge Base\n- Agent decides which tool(s) to use based on the query\n\n**Key Difference from Manual Implementation:**\nThe original workflow manually implemented ReAct with IF nodes and loops. This redesign uses n8n's native ReAct agent which handles all the reasoning and iteration internally - much cleaner and more reliable!",
+        "height": 512,
+        "width": 450
+      },
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        -3424,
+        1984
+      ],
+      "id": "03635007-6ca2-4c98-a8e1-83a9c628f45e",
+      "name": "Sticky Note"
+    },
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "react-support",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [
+        -2912,
+        1920
+      ],
+      "id": "0b6e1949-087f-4035-8be4-fc242a378005",
+      "webhookId": "react-support-demo",
+      "name": "Customer Query"
+    },
+    {
+      "parameters": {
+        "model": "llama-3.3-70b-versatile",
+        "options": {}
+      },
+      "type": "@n8n/n8n-nodes-langchain.lmChatGroq",
+      "typeVersion": 1,
+      "position": [
+        -2688,
+        2144
+      ],
+      "id": "1579e10d-13c1-4dd8-9df6-b2397eb7bae5",
+      "name": "Groq LLM (Llama 3.3 70B)",
+      "credentials": {
+        "groqApi": {
+          "id": "9FfZtV8pFbhPx4mJ",
+          "name": "Groq account 2"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ { output: $json.output } }}",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [
+        -2224,
+        1920
+      ],
+      "id": "9c1d6630-bdf8-4800-bae6-ab1297f09917",
+      "name": "Return Final Answer"
+    },
+    {
+      "parameters": {
+        "content": "## Testing the ReAct Agent\n\n**Test 1 - Order Status:**\n```json\n{\n  \"query\": \"What's the status of order ORD-12345?\"\n}\n```\nExpected: Agent uses check_order_status tool\n\n---\n\n**Test 2 - Product Info:**\n```json\n{\n  \"query\": \"Tell me about the Wireless Mouse - price and availability\"\n}\n```\nExpected: Agent uses retrieve_product_info tool\n\n---\n\n**Test 3 - Knowledge Base:**\n```json\n{\n  \"query\": \"What payment methods do you accept?\"\n}\n```\nExpected: Agent uses search_knowledge_base tool\n\n---\n\n**Test 4 - Multiple Tools:**\n```json\n{\n  \"query\": \"I ordered a Monitor 27, when will it ship and can I return it?\"\n}\n```\nExpected: Agent uses retrieve_product_info AND search_knowledge_base\n\n---\n\n**Test 5 - Complex Query:**\n```json\n{\n  \"query\": \"Has my order ORD-12347 been delivered? If so, can I still return it?\"\n}\n```\nExpected: Agent uses check_order_status AND search_knowledge_base",
+        "height": 1128,
+        "width": 772
+      },
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        -1856,
+        1600
+      ],
+      "id": "d2f092cb-c688-4b7a-aa4f-f4b7e4ea9587",
+      "name": "Sticky Note5"
+    },
+    {
+      "parameters": {
+        "promptType": "define",
+        "text": "={{ $json.query }}",
+        "options": {
+          "systemMessage": "You are a helpful customer support agent. Think step-by-step about what information you need and which tools to use. Always provide accurate information based on tool results."
+        }
+      },
+      "id": "2c4fa5c0-45a9-45aa-a0d3-0ccb41e4552f",
+      "name": "ReAct Agent",
+      "type": "@n8n/n8n-nodes-langchain.agent",
+      "typeVersion": 3,
+      "position": [
+        -2576,
+        1920
+      ]
+    },
+    {
+      "parameters": {
+        "description": "Look up order details and shipping status by order ID. Input should be an order ID like ORD-12345.",
+        "jsCode": "// Simulated order database\nconst orders = {\n  'ORD-12345': {\n    orderId: 'ORD-12345',\n    status: 'shipped',\n    trackingNumber: 'TRK-789456123',\n    estimatedDelivery: '2024-01-25',\n    items: ['Wireless Mouse', 'USB Cable']\n  },\n  'ORD-12346': {\n    orderId: 'ORD-12346',\n    status: 'processing',\n    trackingNumber: null,\n    estimatedDelivery: '2024-01-28',\n    items: ['Monitor 27']\n  },\n  'ORD-12347': {\n    orderId: 'ORD-12347',\n    status: 'delivered',\n    trackingNumber: 'TRK-456789012',\n    deliveredDate: '2024-01-20',\n    items: ['Keyboard', 'Mouse Pad']\n  }\n};\n\n// Extract order ID from query (handle various formats)\nconst orderId = query.trim().toUpperCase();\n\n// Look up order\nconst order = orders[orderId];\n\nif (!order) {\n  return `Order ${orderId} not found in our system. Please verify the order ID and try again.`;\n}\n\n// Format response based on status\nlet response = `Order ${order.orderId}:\\n`;\nresponse += `Status: ${order.status.toUpperCase()}\\n`;\nresponse += `Items: ${order.items.join(', ')}\\n`;\n\nif (order.trackingNumber) {\n  response += `Tracking Number: ${order.trackingNumber}\\n`;\n}\n\nif (order.status === 'delivered') {\n  response += `Delivered on: ${order.deliveredDate}`;\n} else if (order.estimatedDelivery) {\n  response += `Estimated Delivery: ${order.estimatedDelivery}`;\n}\n\nreturn response;"
+      },
+      "id": "7581894a-0cd0-41d6-852d-754d9592eb53",
+      "name": "Check Order Status Tool",
+      "type": "@n8n/n8n-nodes-langchain.toolCode",
+      "typeVersion": 1.3,
+      "position": [
+        -2560,
+        2272
+      ]
+    },
+    {
+      "parameters": {
+        "description": "Get product specifications, pricing, and availability. Input should be a product name like Laptop Pro 15 or Wireless Mouse.",
+        "jsCode": "// Simulate product catalog lookup\nconst products = {\n  'laptop pro 15': {\n    name: 'Laptop Pro 15',\n    price: '$1299.99',\n    status: 'in stock',\n    specs: '15-inch display, 16GB RAM, 512GB SSD'\n  },\n  'wireless mouse': {\n    name: 'Wireless Mouse',\n    price: '$29.99',\n    status: 'in stock',\n    specs: 'Ergonomic design, 2.4GHz wireless, 6 buttons'\n  },\n  'monitor 27': {\n    name: 'Monitor 27',\n    price: '$349.99',\n    status: 'out of stock',\n    restock_date: '2025-11-15',\n    specs: '27-inch 4K display, 144Hz refresh rate'\n  }\n};\n\n// Normalize the query to lowercase for matching\nconst productKey = query.toLowerCase().trim();\n\n// Find matching product\nconst product = products[productKey];\n\nif (!product) {\n  return `Product \"${query}\" not found in catalog. Available products: Laptop Pro 15, Wireless Mouse, Monitor 27`;\n}\n\n// Build response\nlet response = `Product: ${product.name}\\nPrice: ${product.price}\\nStatus: ${product.status}`;\n\nif (product.restock_date) {\n  response += `\\nExpected Restock: ${product.restock_date}`;\n}\n\nresponse += `\\nSpecifications: ${product.specs}`;\n\nreturn response;"
+      },
+      "id": "597ea844-634e-44b1-8485-3dca2db94021",
+      "name": "Retrieve Product Info Tool",
+      "type": "@n8n/n8n-nodes-langchain.toolCode",
+      "typeVersion": 1.3,
+      "position": [
+        -2432,
+        2144
+      ]
+    },
+    {
+      "parameters": {
+        "description": "Search FAQs and support articles for information about policies, shipping, payments, and returns. Input should be a search query or question.",
+        "jsCode": "// Simulate knowledge base search\nconst knowledgeBase = [\n  {\n    title: \"Payment Methods\",\n    content: \"We accept Visa, Mastercard, American Express, PayPal, and Apple Pay. All transactions are secure and encrypted.\"\n  },\n  {\n    title: \"Return Policy\",\n    content: \"We offer a 30-day return policy for all products. Items must be unused and in original packaging. Refunds are processed within 5-7 business days.\"\n  },\n  {\n    title: \"Shipping Times\",\n    content: \"Standard shipping takes 5-7 business days. Express shipping (2-3 days) and overnight shipping options are available at checkout.\"\n  },\n  {\n    title: \"International Shipping\",\n    content: \"We ship to over 50 countries worldwide. International orders typically arrive within 10-15 business days. Customs fees may apply.\"\n  },\n  {\n    title: \"Order Tracking\",\n    content: \"Once your order ships, you'll receive a tracking number via email. You can track your package on our website or the carrier's site.\"\n  }\n];\n\n// Search through knowledge base\nconst searchQuery = query.toLowerCase();\nconst results = knowledgeBase.filter(article => \n  article.title.toLowerCase().includes(searchQuery) || \n  article.content.toLowerCase().includes(searchQuery)\n);\n\nif (results.length === 0) {\n  return \"No relevant articles found. Please contact customer support for assistance.\";\n}\n\n// Return formatted results\nreturn results.map(article => `**${article.title}**\\n${article.content}`).join('\\n\\n');"
+      },
+      "id": "efd0dc3a-ade8-4303-be6b-fa8aabe5f2b8",
+      "name": "Search Knowledge Base Tool",
+      "type": "@n8n/n8n-nodes-langchain.toolCode",
+      "typeVersion": 1.3,
+      "position": [
+        -2304,
+        2272
+      ]
+    }
+  ],
+  "pinData": {
+    "Customer Query": [
+      {
+        "json": {
+          "query": "Tell me about the Wireless Mouse - price and availability"
+        }
+      }
+    ]
+  },
+  "connections": {
+    "Customer Query": {
+      "main": [
+        [
+          {
+            "node": "ReAct Agent",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Groq LLM (Llama 3.3 70B)": {
+      "ai_languageModel": [
+        [
+          {
+            "node": "ReAct Agent",
+            "type": "ai_languageModel",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Check Order Status Tool": {
+      "ai_tool": [
+        [
+          {
+            "node": "ReAct Agent",
+            "type": "ai_tool",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Retrieve Product Info Tool": {
+      "ai_tool": [
+        [
+          {
+            "node": "ReAct Agent",
+            "type": "ai_tool",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Search Knowledge Base Tool": {
+      "ai_tool": [
+        [
+          {
+            "node": "ReAct Agent",
+            "type": "ai_tool",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "ReAct Agent": {
+      "main": [
+        [
+          {
+            "node": "Return Final Answer",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "versionId": "2c210014-d692-43ed-a2a2-4e15a4632ba5",
+  "meta": {
+    "templateCredsSetupCompleted": true,
+    "instanceId": "41d1e72e4425af7bb5431f5a3935e005f1f2bc790948207b9a931061d160b4be"
+  },
+  "id": "N4Z6SRnfmV1VhDA8",
+  "tags": []
+}
