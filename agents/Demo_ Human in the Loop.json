@@ -1,0 +1,123 @@
+{
+  "name": "Demo: Human in the Loop",
+  "nodes": [
+    {
+      "parameters": {
+        "options": {}
+      },
+      "type": "@n8n/n8n-nodes-langchain.chatTrigger",
+      "typeVersion": 1.3,
+      "position": [
+        208,
+        0
+      ],
+      "id": "99efbc51-d254-43c6-bbe9-bb0b4bf5cbd3",
+      "name": "When chat message received",
+      "webhookId": "cef56769-a520-41c6-ab27-925dee8cc73f"
+    },
+    {
+      "parameters": {
+        "options": {}
+      },
+      "type": "@n8n/n8n-nodes-langchain.agent",
+      "typeVersion": 3,
+      "position": [
+        416,
+        0
+      ],
+      "id": "a84e67ac-e572-49bf-a1b9-93d5acd9eb87",
+      "name": "AI Agent"
+    },
+    {
+      "parameters": {
+        "operation": "sendAndWait",
+        "sendTo": "peyman.teymoori@usn.no",
+        "subject": "Approval required",
+        "message": "Please!",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.gmail",
+      "typeVersion": 2.1,
+      "position": [
+        768,
+        0
+      ],
+      "id": "f6b851fe-a898-4d42-aca5-86754ec6d88a",
+      "name": "Send a message",
+      "webhookId": "dd62e995-f607-414b-902f-cc8f3821b0b1",
+      "credentials": {
+        "gmailOAuth2": {
+          "id": "7WpjY0GoqLAvtZeJ",
+          "name": "Gmail account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "model": "meta-llama/llama-4-scout-17b-16e-instruct",
+        "options": {}
+      },
+      "type": "@n8n/n8n-nodes-langchain.lmChatGroq",
+      "typeVersion": 1,
+      "position": [
+        416,
+        224
+      ],
+      "id": "7d4e8590-759c-4376-9419-a2bb31ad9bb9",
+      "name": "Groq Chat Model",
+      "credentials": {
+        "groqApi": {
+          "id": "9FfZtV8pFbhPx4mJ",
+          "name": "Groq account 2"
+        }
+      }
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "When chat message received": {
+      "main": [
+        [
+          {
+            "node": "AI Agent",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "AI Agent": {
+      "main": [
+        [
+          {
+            "node": "Send a message",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Groq Chat Model": {
+      "ai_languageModel": [
+        [
+          {
+            "node": "AI Agent",
+            "type": "ai_languageModel",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "versionId": "72942fd3-4adf-4888-a810-67c573d4aa8f",
+  "meta": {
+    "templateCredsSetupCompleted": true,
+    "instanceId": "41d1e72e4425af7bb5431f5a3935e005f1f2bc790948207b9a931061d160b4be"
+  },
+  "id": "F3eAeFuzFCOGg3E7",
+  "tags": []
+}
